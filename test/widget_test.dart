@@ -20,7 +20,8 @@ void main() {
     // Tap Passer -> Home Screen
     await tester.tap(find.text('Passer'));
     await tester.pumpAndSettle();
-    expect(find.text('Bienvenue sur DAR PLUS'), findsOneWidget);
+    expect(find.text('Ahmed 👋'), findsOneWidget);
+    expect(find.text('Catégories'), findsOneWidget);
   });
 
   testWidgets('Clean Login Screen without role buttons and with forgot password',

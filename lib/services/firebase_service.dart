@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../firebase_options.dart';
 
 class ProApplication {
   final String id;
@@ -75,12 +76,14 @@ class FirebaseService {
       if (Firebase.apps.isNotEmpty) {
         _isFirebaseInitialized = true;
       } else {
-        // Will succeed if google-services.json or options are provided
-        await Firebase.initializeApp();
+        await Firebase.initializeApp(
+          options: DefaultFirebaseOptions.currentPlatform,
+        );
         _isFirebaseInitialized = true;
       }
+      debugPrint('Firebase connecté avec succès au projet darplus-edfbe !');
     } catch (e) {
-      debugPrint('Firebase not yet configured with google-services.json: $e');
+      debugPrint('Erreur initialisation Firebase: $e');
       _isFirebaseInitialized = false;
     }
   }

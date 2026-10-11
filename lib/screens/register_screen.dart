@@ -5,6 +5,8 @@ import '../widgets/professional_input_field.dart';
 import '../widgets/contact_admin_sheet.dart';
 import 'home_screen.dart';
 import 'login_screen.dart';
+import 'admin_requests_screen.dart';
+import '../services/notification_service.dart';
 
 enum AccountType { client, professionnel }
 
@@ -95,16 +97,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       });
 
       if (result['success'] == true) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(result['message'] as String),
-            backgroundColor: AppTheme.tealPrimary,
-          ),
-        );
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => const HomeScreen()),
-          (route) => false,
-        );
+        _showClientEmailVerificationDialog(_emailController.text);
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -129,7 +122,40 @@ class _RegisterScreenState extends State<RegisterScreen> {
       });
 
       if (result['success'] == true) {
+        final proApp = ProApplication(
+          id: result['id'] ?? 'pro_${DateTime.now().millisecondsSinceEpoch}',
+          fullName: _fullNameController.text,
+          phone: _phoneController.text,
+          email: _emailController.text,
+          serviceType: _selectedServiceType!,
+          status: 'en_attente',
+          createdAt: DateTime.now(),
+        );
+
         _showProSuccessDialog();
+
+        // Notification cliquable instantanée pour l'administrateur
+        NotificationService.showClickableAdminBanner(
+          context,
+          InAppNotification(
+            id: 'notif_${DateTime.now().millisecondsSinceEpoch}',
+            title: 'Nouvelle demande Pro reçue !',
+            message:
+                '${_fullNameController.text} souhaite rejoindre DAR PLUS pour "${_selectedServiceType!}". Appuyez pour voir les détails.',
+            proApplication: proApp,
+            timestamp: DateTime.now(),
+          ),
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => AdminRequestsScreen(
+                  highlightAppId: proApp.id,
+                ),
+              ),
+            );
+          },
+        );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -139,6 +165,127 @@ class _RegisterScreenState extends State<RegisterScreen> {
         );
       }
     }
+  }
+
+  void _showClientEmailVerificationDialog(String email) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        return Dialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 72,
+                  height: 72,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0C5050).withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.mark_email_read_rounded,
+                    color: Color(0xFF0C5050),
+                    size: 40,
+                  ),
+                ),
+                const SizedBox(height: 18),
+                const Text(
+                  'Vérifiez votre e-mail',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.titleColor,
+                    fontFamily: 'serif',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                RichText(
+                  textAlign: TextAlign.center,
+                  text: TextSpan(
+                    style: const TextStyle(
+                      fontSize: 13.5,
+                      color: Color(0xFF475569),
+                      height: 1.45,
+                      fontFamily: 'sans-serif',
+                    ),
+                    children: [
+                      const TextSpan(
+                        text: 'Un e-mail de confirmation a été envoyé à :\n',
+                      ),
+                      TextSpan(
+                        text: '$email\n\n',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF0C5050),
+                        ),
+                      ),
+                      const TextSpan(
+                        text:
+                            'Veuillez cliquer sur le lien reçu dans votre boîte de réception pour valider votre compte avant de vous connecter.',
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
+                // Bouton Se connecter
+                SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      Navigator.of(context).pushReplacement(
+                        MaterialPageRoute(builder: (_) => const LoginScreen()),
+                      );
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0C5050),
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                    child: const Text(
+                      'Aller à la connexion',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextButton(
+                  onPressed: () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Un nouvel e-mail a été envoyé à $email'),
+                        backgroundColor: const Color(0xFF0C5050),
+                      ),
+                    );
+                  },
+                  child: const Text(
+                    'Renvoyer l\'e-mail de confirmation',
+                    style: TextStyle(
+                      color: AppTheme.orangePrimary,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   void _showProSuccessDialog() {

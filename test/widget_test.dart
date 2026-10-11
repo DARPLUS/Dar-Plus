@@ -23,7 +23,7 @@ void main() {
     expect(find.text('Bienvenue sur DAR PLUS'), findsOneWidget);
   });
 
-  testWidgets('Unified Login Screen renders Client, Pro, and Admin options',
+  testWidgets('Clean Login Screen without role buttons and with forgot password',
       (WidgetTester tester) async {
     await tester.pumpWidget(const MaterialApp(
       home: LoginScreen(),
@@ -33,12 +33,10 @@ void main() {
     expect(find.text('Connexion'), findsWidgets);
     expect(find.text('Vos services à domicile'), findsOneWidget);
 
-    // Verify role toggles
-    expect(find.text('Client'), findsOneWidget);
-    expect(find.text('Professionnel'), findsOneWidget);
-    expect(find.text('Admin'), findsOneWidget);
+    // Verify role buttons are removed from login
+    expect(find.byType(Radio), findsNothing);
 
-    // Verify fields and social buttons
+    // Verify fields and actions
     expect(find.text('Email'), findsOneWidget);
     expect(find.text('Mot de passe'), findsOneWidget);
     expect(find.text('Mot de passe oublié?'), findsOneWidget);

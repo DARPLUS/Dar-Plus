@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
+import '../services/notification_service.dart';
 import 'register_screen.dart';
 import 'admin_requests_screen.dart';
 
@@ -66,8 +67,39 @@ class HomeScreen extends StatelessWidget {
             },
           ),
           IconButton(
-            icon: const Icon(Icons.notifications_none_rounded, color: AppTheme.titleColor),
-            onPressed: () {},
+            tooltip: 'Demandes & Notifications Pro',
+            icon: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                const Icon(Icons.notifications_none_rounded, color: AppTheme.titleColor),
+                if (NotificationService().unreadCount > 0)
+                  Positioned(
+                    right: -2,
+                    top: -2,
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: const BoxDecoration(
+                        color: AppTheme.orangePrimary,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Text(
+                        '${NotificationService().unreadCount}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const AdminRequestsScreen()),
+              );
+            },
           ),
           const SizedBox(width: 8),
         ],

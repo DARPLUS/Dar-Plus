@@ -3,6 +3,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../firebase_options.dart';
+import 'notification_service.dart';
 
 class ProApplication {
   final String id;
@@ -104,7 +105,15 @@ class FirebaseService {
           password: password.trim(),
         );
 
-        final uid = cred.user!.uid;
+        final user = cred.user!;
+        final uid = user.uid;
+
+        // Envoi automatique de l'e-mail de vérification Firebase
+        try {
+          await user.sendEmailVerification();
+        } catch (e) {
+          debugPrint('Erreur lors de l\'envoi de l\'email de vérification : $e');
+        }
 
         // 2. Enregistrement du profil dans Cloud Firestore
         await FirebaseFirestore.instance.collection('users').doc(uid).set({
@@ -113,6 +122,7 @@ class FirebaseService {
           'phone': phone.trim(),
           'email': email.trim(),
           'role': 'client',
+          'isEmailVerified': false,
           'createdAt': FieldValue.serverTimestamp(),
           'isActive': true,
         });
@@ -120,7 +130,10 @@ class FirebaseService {
         return {
           'success': true,
           'uid': uid,
-          'message': 'Compte client créé avec succès sur Firebase.',
+          'emailSent': true,
+          'email': email.trim(),
+          'message':
+              'Compte client créé avec succès ! Un e-mail de vérification vous a été envoyé.',
         };
       } else {
         // Simulation en mémoire pour tester l'interface sans crash
@@ -128,7 +141,10 @@ class FirebaseService {
         return {
           'success': true,
           'uid': 'mock_client_${DateTime.now().millisecondsSinceEpoch}',
-          'message': 'Compte client enregistré (Mode Local Démo).',
+          'emailSent': true,
+          'email': email.trim(),
+          'message':
+              'Compte créé ! (E-mail de vérification simulé envoyé à ${email.trim()}).',
         };
       }
     } on FirebaseAuthException catch (e) {
@@ -186,6 +202,9 @@ class FirebaseService {
           'tempPassword': password, // Pour création automatique dès approbation
         });
 
+        // Déclenche la notification in-app pour l'administrateur
+        NotificationService().notifyAdminNewProApplication(app);
+
         return {
           'success': true,
           'id': appId,
@@ -195,6 +214,7 @@ class FirebaseService {
       } else {
         // Sauvegarde locale de démonstration
         _localProApplications.insert(0, app);
+        NotificationService().notifyAdminNewProApplication(app);
         await Future.delayed(const Duration(milliseconds: 600));
         return {
           'success': true,

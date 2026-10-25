@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import 'login_screen.dart';
+import '../services/firebase_service.dart';
 
 class ProHomeScreen extends StatefulWidget {
   final String proName;
@@ -1447,6 +1448,14 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                 onTap: () => Navigator.pop(context),
               ),
               ListTile(
+                leading: const Icon(Icons.lock_reset_rounded, color: Color(0xFF0F2D2A)),
+                title: const Text('Sécurité & Mot de passe'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showChangePasswordDialog();
+                },
+              ),
+              ListTile(
                 leading: const Icon(Icons.logout_rounded, color: Colors.redAccent),
                 title: const Text('Se déconnecter', style: TextStyle(color: Colors.redAccent)),
                 onTap: () {
@@ -1460,6 +1469,175 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  void _showChangePasswordDialog() {
+    final currentPassCtrl = TextEditingController();
+    final newPassCtrl = TextEditingController();
+    final confirmPassCtrl = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+    bool isSaving = false;
+    bool obscureCurrent = true;
+    bool obscureNew = true;
+    bool obscureConfirm = true;
+    String? errorMessage;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+            title: const Row(
+              children: [
+                Icon(Icons.lock_reset_rounded, color: Color(0xFF0F2D2A), size: 24),
+                SizedBox(width: 10),
+                Text('Sécurité & Mot de passe',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              ],
+            ),
+            content: Form(
+              key: formKey,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'Modifiez directement votre mot de passe professionnel DAR PLUS.',
+                      style: TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+                    ),
+                    const SizedBox(height: 16),
+                    if (errorMessage != null) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFEE2E2),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.error_outline_rounded, color: Color(0xFFDC2626), size: 18),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                errorMessage!,
+                                style: const TextStyle(fontSize: 12, color: Color(0xFFDC2626)),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                    ],
+                    TextFormField(
+                      controller: currentPassCtrl,
+                      obscureText: obscureCurrent,
+                      decoration: InputDecoration(
+                        labelText: 'Mot de passe actuel',
+                        prefixIcon: const Icon(Icons.lock_outline),
+                        suffixIcon: IconButton(
+                          icon: Icon(obscureCurrent ? Icons.visibility_off : Icons.visibility),
+                          onPressed: () => setDialogState(() => obscureCurrent = !obscureCurrent),
+                        ),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                      validator: (v) => v == null || v.trim().isEmpty ? 'Mot de passe actuel requis' : null,
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: newPassCtrl,
+                      obscureText: obscureNew,
+                      decoration: InputDecoration(
+                        labelText: 'Nouveau mot de passe',
+                        prefixIcon: const Icon(Icons.key_rounded),
+                        suffixIcon: IconButton(
+                          icon: Icon(obscureNew ? Icons.visibility_off : Icons.visibility),
+                          onPressed: () => setDialogState(() => obscureNew = !obscureNew),
+                        ),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                      validator: (v) {
+                        if (v == null || v.trim().isEmpty) return 'Nouveau mot de passe requis';
+                        if (v.trim().length < 6) return 'Minimum 6 caractères';
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: confirmPassCtrl,
+                      obscureText: obscureConfirm,
+                      decoration: InputDecoration(
+                        labelText: 'Confirmer le mot de passe',
+                        prefixIcon: const Icon(Icons.key_rounded),
+                        suffixIcon: IconButton(
+                          icon: Icon(obscureConfirm ? Icons.visibility_off : Icons.visibility),
+                          onPressed: () => setDialogState(() => obscureConfirm = !obscureConfirm),
+                        ),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                      validator: (v) {
+                        if (v != newPassCtrl.text) return 'Les mots de passe ne correspondent pas';
+                        return null;
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: isSaving ? null : () => Navigator.pop(ctx),
+                child: const Text('Annuler', style: TextStyle(color: Color(0xFF64748B))),
+              ),
+              ElevatedButton(
+                onPressed: isSaving
+                    ? null
+                    : () async {
+                        if (!formKey.currentState!.validate()) return;
+                        setDialogState(() {
+                          isSaving = true;
+                          errorMessage = null;
+                        });
+
+                        final messenger = ScaffoldMessenger.of(context);
+                        final result = await FirebaseService().changePassword(
+                          currentPassword: currentPassCtrl.text.trim(),
+                          newPassword: newPassCtrl.text.trim(),
+                        );
+
+                        if (result['success'] == true) {
+                          if (ctx.mounted) Navigator.pop(ctx);
+                          messenger.showSnackBar(
+                            SnackBar(
+                              content: Text(result['message'] as String),
+                              backgroundColor: const Color(0xFF0F2D2A),
+                            ),
+                          );
+                        } else {
+                          setDialogState(() {
+                            isSaving = false;
+                            errorMessage = result['message'] as String?;
+                          });
+                        }
+                      },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF0F2D2A),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                child: isSaving
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      )
+                    : const Text('Mettre à jour'),
+              ),
+            ],
+          );
+        },
       ),
     );
   }

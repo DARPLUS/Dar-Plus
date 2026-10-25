@@ -1,14 +1,11 @@
 import 'package:flutter/material.dart';
-import '../theme/app_theme.dart';
 import '../services/firebase_service.dart';
-import '../widgets/professional_input_field.dart';
-import '../widgets/contact_admin_sheet.dart';
-import 'home_screen.dart';
-import 'login_screen.dart';
-import 'admin_requests_screen.dart';
 import '../services/notification_service.dart';
+import 'login_screen.dart';
+import 'home_screen.dart';
+import 'admin_requests_screen.dart';
 
-enum AccountType { client, professionnel }
+enum AccountType { client, professionnel, admin }
 
 class RegisterScreen extends StatefulWidget {
   final AccountType initialType;
@@ -28,12 +25,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   final _fullNameController = TextEditingController();
   final _phoneController = TextEditingController();
+  final _cinController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
+  final _adminKeyController = TextEditingController();
 
   String? _selectedServiceType;
   bool _obscurePassword = true;
+  bool _obscureConfirmPassword = true;
+  bool _acceptTerms = true;
   bool _isLoading = false;
+  bool _passwordMismatch = false;
 
   final List<String> _serviceTypes = const [
     'Plomberie & Sanitaire',
@@ -58,19 +61,45 @@ class _RegisterScreenState extends State<RegisterScreen> {
   void dispose() {
     _fullNameController.dispose();
     _phoneController.dispose();
+    _cinController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
+    _confirmPasswordController.dispose();
+    _adminKeyController.dispose();
     super.dispose();
   }
 
   Future<void> _handleSubmit() async {
     if (!_formKey.currentState!.validate()) return;
 
+    if (_passwordController.text != _confirmPasswordController.text) {
+      setState(() {
+        _passwordMismatch = true;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Les mots de passe ne correspondent pas.'),
+          backgroundColor: Color(0xFFDC2626),
+        ),
+      );
+      return;
+    }
+
+    if (!_acceptTerms) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Veuillez accepter les conditions d\'utilisation.'),
+          backgroundColor: Color(0xFFDC2626),
+        ),
+      );
+      return;
+    }
+
     if (_accountType == AccountType.professionnel && _selectedServiceType == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Veuillez sélectionner votre type de service.'),
-          backgroundColor: AppTheme.orangePrimary,
+          content: Text('Veuillez sélectionner votre domaine de service.'),
+          backgroundColor: Color(0xFFEA580C),
         ),
       );
       return;
@@ -83,10 +112,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
     final firebaseService = FirebaseService();
 
     if (_accountType == AccountType.client) {
-      // 1. Inscription CLIENT
+      // 1. Inscription CLIENT dans Firebase
+      final phone = _phoneController.text.trim().isNotEmpty
+          ? _phoneController.text.trim()
+          : '+216 50 000 000';
+
       final result = await firebaseService.registerClient(
         fullName: _fullNameController.text,
-        phone: _phoneController.text,
+        phone: phone,
         email: _emailController.text,
         password: _passwordController.text,
       );
@@ -106,13 +139,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
           ),
         );
       }
-    } else {
-      // 2. Soumission Demande PROFESSIONNEL pour l'Admin
+    } else if (_accountType == AccountType.professionnel) {
+      // 2. Soumission Demande PROFESSIONNEL pour examen Admin
+      final phone = _phoneController.text.trim().isNotEmpty
+          ? _phoneController.text.trim()
+          : '+216 52 000 000';
+
       final result = await firebaseService.submitProApplication(
         fullName: _fullNameController.text,
-        phone: _phoneController.text,
+        phone: phone,
         email: _emailController.text,
         password: _passwordController.text,
+        cin: _cinController.text.trim(),
         serviceType: _selectedServiceType!,
       );
 
@@ -125,8 +163,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
         final proApp = ProApplication(
           id: result['id'] ?? 'pro_${DateTime.now().millisecondsSinceEpoch}',
           fullName: _fullNameController.text,
-          phone: _phoneController.text,
+          phone: phone,
           email: _emailController.text,
+          cin: _cinController.text.trim(),
           serviceType: _selectedServiceType!,
           status: 'en_attente',
           createdAt: DateTime.now(),
@@ -134,14 +173,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
         _showProSuccessDialog();
 
-        // Notification cliquable instantanée pour l'administrateur
+        // Notification active pour l'administrateur
         NotificationService.showClickableAdminBanner(
           context,
           InAppNotification(
             id: 'notif_${DateTime.now().millisecondsSinceEpoch}',
             title: 'Nouvelle demande Pro reçue !',
             message:
-                '${_fullNameController.text} souhaite rejoindre DAR PLUS pour "${_selectedServiceType!}". Appuyez pour voir les détails.',
+                '${_fullNameController.text} souhaite créer un compte pour "${_selectedServiceType!}". Cliquez pour vérifier ses coordonnées.',
             proApplication: proApp,
             timestamp: DateTime.now(),
           ),
@@ -164,6 +203,33 @@ class _RegisterScreenState extends State<RegisterScreen> {
           ),
         );
       }
+    } else {
+      // 3. Création Compte ADMINISTRATEUR
+      final result = await firebaseService.registerAdmin(
+        fullName: _fullNameController.text,
+        phone: _phoneController.text.trim().isNotEmpty
+            ? _phoneController.text.trim()
+            : '+216 71 000 000',
+        email: _emailController.text,
+        password: _passwordController.text,
+        adminSecretKey: _adminKeyController.text.trim(),
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+      });
+
+      if (result['success'] == true) {
+        _showAdminSuccessDialog();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result['message'] as String),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
     }
   }
 
@@ -173,8 +239,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       barrierDismissible: false,
       builder: (ctx) {
         return Dialog(
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
           child: Padding(
             padding: const EdgeInsets.all(24),
             child: Column(
@@ -184,99 +249,101 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   width: 72,
                   height: 72,
                   decoration: BoxDecoration(
-                    color: const Color(0xFF0C5050).withValues(alpha: 0.12),
+                    color: const Color(0xFF10B981).withValues(alpha: 0.12),
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(
-                    Icons.mark_email_read_rounded,
-                    color: Color(0xFF0C5050),
+                    Icons.check_circle_rounded,
+                    color: Color(0xFF10B981),
                     size: 40,
                   ),
                 ),
                 const SizedBox(height: 18),
                 const Text(
-                  'Vérifiez votre e-mail',
+                  'Compte Client créé !',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.bold,
-                    color: AppTheme.titleColor,
-                    fontFamily: 'serif',
+                    color: Color(0xFF0F172A),
                   ),
                 ),
                 const SizedBox(height: 12),
-                RichText(
+                Text(
+                  'Félicitations ${_fullNameController.text} !\nVotre compte client a été créé avec succès avec l\'adresse :\n$email',
                   textAlign: TextAlign.center,
-                  text: TextSpan(
-                    style: const TextStyle(
-                      fontSize: 13.5,
-                      color: Color(0xFF475569),
-                      height: 1.45,
-                      fontFamily: 'sans-serif',
-                    ),
-                    children: [
-                      const TextSpan(
-                        text: 'Un e-mail de confirmation a été envoyé à :\n',
-                      ),
-                      TextSpan(
-                        text: '$email\n\n',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF0C5050),
-                        ),
-                      ),
-                      const TextSpan(
-                        text:
-                            'Veuillez cliquer sur le lien reçu dans votre boîte de réception pour valider votre compte avant de vous connecter.',
-                      ),
-                    ],
+                  style: const TextStyle(
+                    fontSize: 14,
+                    color: Color(0xFF475569),
+                    height: 1.45,
                   ),
                 ),
                 const SizedBox(height: 24),
-                // Bouton Se connecter
+                // Button 1: Accéder immédiatement à l'espace client
                 SizedBox(
                   width: double.infinity,
                   height: 50,
-                  child: ElevatedButton(
+                  child: ElevatedButton.icon(
                     onPressed: () {
                       Navigator.pop(ctx);
-                      Navigator.of(context).pushReplacement(
-                        MaterialPageRoute(builder: (_) => const LoginScreen()),
+                      Navigator.of(context).pushAndRemoveUntil(
+                        MaterialPageRoute(
+                          builder: (_) => HomeScreen(
+                            userName: _fullNameController.text.trim().isNotEmpty
+                                ? _fullNameController.text.trim()
+                                : 'Client',
+                            userEmail: _emailController.text.trim(),
+                            userPhone: _phoneController.text.trim(),
+                          ),
+                        ),
+                        (route) => false,
                       );
                     },
+                    icon: const Icon(Icons.arrow_forward_rounded, size: 18),
+                    label: const Text(
+                      'Accéder à mon espace',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF0C5050),
+                      backgroundColor: const Color(0xFF0D544E),
                       foregroundColor: Colors.white,
                       elevation: 0,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(16),
                       ),
                     ),
-                    child: const Text(
-                      'Aller à la connexion',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
                   ),
                 ),
                 const SizedBox(height: 10),
-                TextButton(
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Un nouvel e-mail a été envoyé à $email'),
-                        backgroundColor: const Color(0xFF0C5050),
+                // Button 2: Aller à la connexion
+                SizedBox(
+                  width: double.infinity,
+                  height: 46,
+                  child: OutlinedButton(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      Navigator.of(context).pushReplacement(
+                        MaterialPageRoute(
+                          builder: (_) => LoginScreen(prefilledEmail: email),
+                        ),
+                      );
+                    },
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF0D544E),
+                      side: const BorderSide(color: Color(0xFF0D544E)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
                       ),
-                    );
-                  },
-                  child: const Text(
-                    'Renvoyer l\'e-mail de confirmation',
-                    style: TextStyle(
-                      color: AppTheme.orangePrimary,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 13,
+                    ),
+                    child: const Text(
+                      'Se connecter',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ),
@@ -301,32 +368,31 @@ class _RegisterScreenState extends State<RegisterScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
-                  width: 68,
-                  height: 68,
+                  width: 70,
+                  height: 70,
                   decoration: BoxDecoration(
-                    color: AppTheme.tealPrimary.withValues(alpha: 0.12),
+                    color: const Color(0xFFEA580C).withValues(alpha: 0.14),
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(
-                    Icons.check_circle_rounded,
-                    color: AppTheme.tealPrimary,
-                    size: 44,
+                    Icons.hourglass_top_rounded,
+                    color: Color(0xFFEA580C),
+                    size: 38,
                   ),
                 ),
                 const SizedBox(height: 18),
                 const Text(
-                  'Demande transmise à l\'Admin !',
+                  'Compte Professionnel créé !',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
-                    color: AppTheme.titleColor,
-                    fontFamily: 'serif',
+                    color: Color(0xFF0F172A),
                   ),
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'Merci ${_fullNameController.text}.\nVotre demande de création de compte professionnel pour le service "$_selectedServiceType" a été envoyée avec succès à l\'administrateur DAR PLUS.\n\nVous serez contacté sous 24h par notre équipe pour finaliser l\'activation.',
+                  'Merci ${_fullNameController.text} !\nVotre profil professionnel ($_selectedServiceType) a été transmis à l\'administrateur DAR PLUS. Vos coordonnées seront confirmées avant activation.',
                   textAlign: TextAlign.center,
                   style: const TextStyle(
                     fontSize: 13.5,
@@ -335,24 +401,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   ),
                 ),
                 const SizedBox(height: 24),
-                // Contacter admin button
-                OutlinedButton.icon(
-                  onPressed: () {
-                    Navigator.pop(ctx);
-                    ContactAdminSheet.show(context);
-                  },
-                  icon: const Icon(Icons.headset_mic_rounded, size: 18),
-                  label: const Text('Nous contacter directement'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppTheme.tealPrimary,
-                    side: const BorderSide(color: AppTheme.tealPrimary),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                // Terminer
                 SizedBox(
                   width: double.infinity,
                   height: 48,
@@ -360,12 +408,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     onPressed: () {
                       Navigator.pop(ctx);
                       Navigator.of(context).pushAndRemoveUntil(
-                        MaterialPageRoute(builder: (_) => const HomeScreen()),
+                        MaterialPageRoute(
+                          builder: (_) => LoginScreen(
+                            prefilledEmail: _emailController.text,
+                          ),
+                        ),
                         (route) => false,
                       );
                     },
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.tealPrimary,
+                      backgroundColor: const Color(0xFF0D544E),
                       foregroundColor: Colors.white,
                       elevation: 0,
                       shape: RoundedRectangleBorder(
@@ -373,7 +425,90 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       ),
                     ),
                     child: const Text(
-                      'Retour à l\'accueil',
+                      'Aller à la connexion',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showAdminSuccessDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        return Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 70,
+                  height: 70,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF7C3AED).withValues(alpha: 0.14),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.admin_panel_settings_rounded,
+                    color: Color(0xFF7C3AED),
+                    size: 40,
+                  ),
+                ),
+                const SizedBox(height: 18),
+                const Text(
+                  'Compte Admin créé !',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF0F172A),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Le compte administrateur ${_fullNameController.text} (${_emailController.text}) a été créé avec succès avec les droits de supervision DAR PLUS.',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 13.5,
+                    color: Color(0xFF475569),
+                    height: 1.45,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      Navigator.of(context).pushAndRemoveUntil(
+                        MaterialPageRoute(
+                          builder: (_) => LoginScreen(
+                            prefilledEmail: _emailController.text,
+                          ),
+                        ),
+                        (route) => false,
+                      );
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0D544E),
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                    child: const Text(
+                      'Se connecter comme Administrateur',
                       style: TextStyle(fontWeight: FontWeight.bold),
                     ),
                   ),
@@ -388,495 +523,604 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final topPadding = MediaQuery.of(context).padding.top;
-
     return Scaffold(
-      backgroundColor: AppTheme.background,
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
-            // 1. Dark Teal Top Header (matches screenshot)
-            Container(
-              width: double.infinity,
-              padding: EdgeInsets.only(
-                top: topPadding + 14,
-                left: 20,
-                right: 20,
-                bottom: 24,
-              ),
-              decoration: const BoxDecoration(
-                color: Color(0xFF0C5050),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Back button
-                  InkWell(
-                    onTap: () => Navigator.of(context).pop(),
-                    borderRadius: BorderRadius.circular(8),
-                    child: const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 4, horizontal: 2),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.arrow_back_rounded,
-                            color: Colors.white,
-                            size: 20,
-                          ),
-                          SizedBox(width: 6),
-                          Text(
-                            'Retour',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 14.5,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-                  // Title
-                  const Text(
-                    'S\'inscrire',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 32,
-                      fontWeight: FontWeight.bold,
-                      fontFamily: 'serif',
-                      letterSpacing: -0.5,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  // Subtitle
-                  Text(
-                    'Vos services à domicile',
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.85),
-                      fontSize: 15,
-                      fontWeight: FontWeight.normal,
-                      fontFamily: 'sans-serif',
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            // 2. Body with Toggle and Input Fields
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 20),
-              child: Form(
-                key: _formKey,
-                child: Column(
+      backgroundColor: const Color(0xFFF8FAFC),
+      body: SafeArea(
+        top: true,
+        child: SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
+          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 16),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // 1. Bouton Retour (Squircle blanc épuré) + Logo Dar Plus
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    // Segmented Toggle: Client / Professionnel (matches screenshot)
-                    Container(
-                      height: 54,
-                      padding: const EdgeInsets.all(4),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFECE8E1),
-                        borderRadius: BorderRadius.circular(22),
-                      ),
-                      child: Row(
-                        children: [
-                          // Tab 1: Client
-                          Expanded(
-                            child: GestureDetector(
-                              onTap: () {
-                                setState(() {
-                                  _accountType = AccountType.client;
-                                });
-                              },
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 200),
-                                decoration: BoxDecoration(
-                                  color: _accountType == AccountType.client
-                                      ? const Color(0xFF0C5050)
-                                      : Colors.transparent,
-                                  borderRadius: BorderRadius.circular(18),
-                                ),
-                                alignment: Alignment.center,
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(
-                                      Icons.person_rounded,
-                                      size: 18,
-                                      color: _accountType == AccountType.client
-                                          ? Colors.white
-                                          : const Color(0xFF7A8696),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      'Client',
-                                      style: TextStyle(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.bold,
-                                        color: _accountType == AccountType.client
-                                            ? Colors.white
-                                            : const Color(0xFF6B7A8E),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
+                    InkWell(
+                      onTap: () {
+                        Navigator.of(context).pushReplacement(
+                          MaterialPageRoute(
+                            builder: (_) => const LoginScreen(),
                           ),
-                          // Tab 2: Professionnel
-                          Expanded(
-                            child: GestureDetector(
-                              onTap: () {
-                                setState(() {
-                                  _accountType = AccountType.professionnel;
-                                });
-                              },
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 200),
-                                decoration: BoxDecoration(
-                                  color: _accountType == AccountType.professionnel
-                                      ? const Color(0xFF0C5050)
-                                      : Colors.transparent,
-                                  borderRadius: BorderRadius.circular(18),
-                                ),
-                                alignment: Alignment.center,
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(
-                                      Icons.build_rounded,
-                                      size: 16,
-                                      color: _accountType == AccountType.professionnel
-                                          ? Colors.white
-                                          : const Color(0xFF7A8696),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      'Professionnel',
-                                      style: TextStyle(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.bold,
-                                        color: _accountType == AccountType.professionnel
-                                            ? Colors.white
-                                            : const Color(0xFF6B7A8E),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    const SizedBox(height: 16),
-
-                    // Professional Notice & Direct Contact Link (Requested feature)
-                    if (_accountType == AccountType.professionnel)
-                      Container(
-                        margin: const EdgeInsets.only(bottom: 16),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 12,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF0C5050).withValues(alpha: 0.08),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: const Color(0xFF0C5050).withValues(alpha: 0.2),
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(
-                              Icons.verified_user_rounded,
-                              color: Color(0xFF0C5050),
-                              size: 24,
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text(
-                                    'Demande de validation Partenaire',
-                                    style: TextStyle(
-                                      fontSize: 12.5,
-                                      fontWeight: FontWeight.bold,
-                                      color: Color(0xFF0C5050),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    'L\'admin recevra votre demande pour créer votre compte.',
-                                    style: TextStyle(
-                                      fontSize: 11.5,
-                                      color: const Color(0xFF0C5050).withValues(alpha: 0.8),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            TextButton(
-                              onPressed: () => ContactAdminSheet.show(context),
-                              style: TextButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(horizontal: 8),
-                                minimumSize: Size.zero,
-                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                              ),
-                              child: const Text(
-                                'Nous contacter',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppTheme.orangePrimary,
-                                  decoration: TextDecoration.underline,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-
-                    // Field 1: Nom complet
-                    ProfessionalInputField(
-                      controller: _fullNameController,
-                      hintText: 'Ahmed Ben Salah',
-                      iconType: ProfessionalIconType.user,
-                      validator: (value) {
-                        if (value == null || value.trim().isEmpty) {
-                          return 'Veuillez saisir votre nom complet';
-                        }
-                        return null;
+                        );
                       },
-                    ),
-                    const SizedBox(height: 14),
-
-                    // Field 2: Téléphone
-                    ProfessionalInputField(
-                      controller: _phoneController,
-                      hintText: '+216 XX XXX XXX',
-                      iconType: ProfessionalIconType.phone,
-                      keyboardType: TextInputType.phone,
-                      validator: (value) {
-                        if (value == null || value.trim().isEmpty) {
-                          return 'Veuillez saisir votre numéro de téléphone';
-                        }
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 14),
-
-                    // Field 3: Email
-                    ProfessionalInputField(
-                      controller: _emailController,
-                      hintText: 'nom@email.com',
-                      iconType: ProfessionalIconType.email,
-                      keyboardType: TextInputType.emailAddress,
-                      validator: (value) {
-                        if (value == null || !value.contains('@')) {
-                          return 'Veuillez saisir une adresse email valide';
-                        }
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 14),
-
-                    // Field 4: Mot de passe
-                    ProfessionalInputField(
-                      controller: _passwordController,
-                      hintText: '••••••••',
-                      iconType: ProfessionalIconType.password,
-                      isPassword: true,
-                      obscureText: _obscurePassword,
-                      onToggleObscure: () {
-                        setState(() {
-                          _obscurePassword = !_obscurePassword;
-                        });
-                      },
-                      validator: (value) {
-                        if (value == null || value.length < 6) {
-                          return 'Le mot de passe doit comporter au moins 6 caractères';
-                        }
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 14),
-
-                    // Field 5: Type de service (Visible ONLY when Professionnel is selected)
-                    if (_accountType == AccountType.professionnel) ...[
-                      Container(
+                      borderRadius: BorderRadius.circular(16),
+                      child: Container(
+                        width: 44,
+                        height: 44,
                         decoration: BoxDecoration(
                           color: Colors.white,
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: const Color(0xFFE8E4DC),
-                            width: 1.2,
-                          ),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.02),
+                              color: Colors.black.withValues(alpha: 0.03),
                               blurRadius: 8,
                               offset: const Offset(0, 2),
                             ),
                           ],
                         ),
-                        child: DropdownButtonFormField<String>(
-                          initialValue: _selectedServiceType,
-                          decoration: InputDecoration(
-                            prefixIcon: Container(
-                              width: 32,
-                              height: 32,
-                              margin: const EdgeInsets.only(left: 14, right: 12),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF64748B).withValues(alpha: 0.12),
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              alignment: Alignment.center,
-                              child: const Icon(
-                                Icons.build_rounded,
-                                color: Color(0xFF64748B),
-                                size: 18,
-                              ),
-                            ),
-                            prefixIconConstraints:
-                                const BoxConstraints(minWidth: 58, minHeight: 48),
-                            border: InputBorder.none,
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 14,
-                            ),
-                          ),
-                          hint: const Text(
-                            'Type de service',
-                            style: TextStyle(
-                              color: Color(0xFF8B98A8),
-                              fontSize: 14.5,
-                            ),
-                          ),
-                          icon: const Padding(
-                            padding: EdgeInsets.only(right: 14),
-                            child: Icon(
-                              Icons.keyboard_arrow_down_rounded,
-                              color: Color(0xFF0C5050),
-                              size: 26,
-                            ),
-                          ),
-                          isExpanded: true,
-                          items: _serviceTypes.map((service) {
-                            return DropdownMenuItem(
-                              value: service,
-                              child: Text(
-                                service,
-                                style: const TextStyle(
-                                  fontSize: 14.5,
-                                  color: Color(0xFF0B1B2B),
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            );
-                          }).toList(),
-                          onChanged: (val) {
-                            setState(() {
-                              _selectedServiceType = val;
-                            });
-                          },
+                        alignment: Alignment.center,
+                        child: const Icon(
+                          Icons.chevron_left_rounded,
+                          color: Color(0xFF0F172A),
+                          size: 28,
                         ),
                       ),
-                      const SizedBox(height: 14),
-                    ],
-
-                    const SizedBox(height: 6),
-
-                    // Terms disclaimer (matches screenshot)
-                    Text(
-                      'En m\'inscrivant, j\'accepte les Conditions d\'utilisation et la Politique de confidentialité',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: const Color(0xFF6B7A8E).withValues(alpha: 0.9),
-                        height: 1.4,
+                    ),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: Image.asset(
+                        'assets/images/logo.png',
+                        width: 38,
+                        height: 38,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
                       ),
                     ),
-
-                    const SizedBox(height: 20),
-
-                    // Action Button: S'inscrire (Terracotta / Orange, matches screenshot)
-                    SizedBox(
-                      width: double.infinity,
-                      height: 56,
-                      child: ElevatedButton(
-                        onPressed: _isLoading ? null : _handleSubmit,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppTheme.orangePrimary,
-                          foregroundColor: Colors.white,
-                          elevation: 0,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(18),
-                          ),
-                        ),
-                        child: _isLoading
-                            ? const SizedBox(
-                                width: 22,
-                                height: 22,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2.5,
-                                  valueColor:
-                                      AlwaysStoppedAnimation<Color>(Colors.white),
-                                ),
-                              )
-                            : const Text(
-                                'S\'inscrire',
-                                style: TextStyle(
-                                  fontSize: 16.5,
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: 0.3,
-                                ),
-                              ),
-                      ),
-                    ),
-
-                    const SizedBox(height: 18),
-
-                    // Footer Link: Déjà un compte ? Connexion (matches screenshot)
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Text(
-                          'Déjà un compte ? ',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Color(0xFF6B7A8E),
-                          ),
-                        ),
-                        GestureDetector(
-                          onTap: () {
-                            Navigator.of(context).pushReplacement(
-                              MaterialPageRoute(
-                                builder: (_) => const LoginScreen(),
-                              ),
-                            );
-                          },
-                          child: const Text(
-                            'Connexion',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF0C5050),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-
-                    const SizedBox(height: 20),
                   ],
                 ),
-              ),
+
+                const SizedBox(height: 22),
+
+                // 2. Titre & Sous-titre (Exactement comme le screenshot)
+                const Text(
+                  'Créer un compte',
+                  style: TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF0F172A),
+                    letterSpacing: -0.5,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Rejoignez Dar Plus en quelques secondes.',
+                  style: TextStyle(
+                    fontSize: 14.5,
+                    color: Color(0xFF64748B),
+                    fontWeight: FontWeight.w400,
+                  ),
+                ),
+
+                const SizedBox(height: 22),
+
+                // 3. Sélecteur de rôle Segmenté (Client / Professionnel)
+                Container(
+                  height: 52,
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE6EEEC),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Row(
+                    children: [
+                      _buildSegmentTab(
+                        title: 'Client',
+                        icon: Icons.person_outline_rounded,
+                        isSelected: _accountType == AccountType.client,
+                        onTap: () {
+                          setState(() {
+                            _accountType = AccountType.client;
+                          });
+                        },
+                      ),
+                      _buildSegmentTab(
+                        title: 'Professionnel',
+                        icon: Icons.build_outlined,
+                        isSelected: _accountType == AccountType.professionnel,
+                        onTap: () {
+                          setState(() {
+                            _accountType = AccountType.professionnel;
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 22),
+
+                // 4. Champ : Nom complet
+                _buildFieldLabel('Nom complet'),
+                _buildCustomTextField(
+                  controller: _fullNameController,
+                  hintText: 'Yasmine Ouertani',
+                  validator: (v) =>
+                      v == null || v.trim().isEmpty ? 'Veuillez saisir votre nom complet' : null,
+                ),
+
+                const SizedBox(height: 18),
+
+                // 5. Champ : Adresse e-mail
+                _buildFieldLabel('Adresse e-mail'),
+                _buildCustomTextField(
+                  controller: _emailController,
+                  hintText: 'yasmine@exemple.com',
+                  keyboardType: TextInputType.emailAddress,
+                  validator: (v) =>
+                      v == null || !v.contains('@') ? 'Veuillez saisir une adresse e-mail valide' : null,
+                ),
+
+                // Si Professionnel : Spécialité et Téléphone pro
+                if (_accountType == AccountType.professionnel) ...[
+                  const SizedBox(height: 18),
+                  _buildFieldLabel('Spécialité / Métier'),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFFDDE3EA), width: 1.2),
+                    ),
+                    child: DropdownButtonFormField<String>(
+                      initialValue: _selectedServiceType,
+                      decoration: const InputDecoration(
+                        prefixIcon: Icon(Icons.handyman_outlined, color: Color(0xFF0D544E), size: 20),
+                        border: InputBorder.none,
+                        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      ),
+                      hint: const Text(
+                        'Sélectionnez votre métier',
+                        style: TextStyle(color: Color(0xFF94A3B8), fontSize: 14.5),
+                      ),
+                      icon: const Padding(
+                        padding: EdgeInsets.only(right: 14),
+                        child: Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFF64748B)),
+                      ),
+                      isExpanded: true,
+                      items: _serviceTypes.map((service) {
+                        return DropdownMenuItem(
+                          value: service,
+                          child: Text(
+                            service,
+                            style: const TextStyle(fontSize: 14.5, color: Color(0xFF0F172A)),
+                          ),
+                        );
+                      }).toList(),
+                      onChanged: (val) {
+                        setState(() {
+                          _selectedServiceType = val;
+                        });
+                      },
+                      validator: (v) => v == null ? 'Veuillez sélectionner un métier' : null,
+                    ),
+                  ),
+
+                  const SizedBox(height: 18),
+                  _buildFieldLabel('Numéro de téléphone'),
+                  _buildCustomTextField(
+                    controller: _phoneController,
+                    hintText: '+216 52 123 456',
+                    keyboardType: TextInputType.phone,
+                    validator: (v) =>
+                        v == null || v.trim().isEmpty ? 'Numéro de téléphone requis' : null,
+                  ),
+
+                  const SizedBox(height: 18),
+                  _buildFieldLabel('Numéro CIN (Carte d\'Identité Nationale)'),
+                  _buildCustomTextField(
+                    controller: _cinController,
+                    hintText: 'Ex: 08123456 (8 chiffres)',
+                    keyboardType: TextInputType.number,
+                    validator: (v) {
+                      if (_accountType == AccountType.professionnel) {
+                        if (v == null || v.trim().isEmpty) {
+                          return 'Numéro CIN requis';
+                        }
+                        final clean = v.trim();
+                        if (clean.length != 8 || int.tryParse(clean) == null) {
+                          return 'Le CIN doit comporter exactement 8 chiffres';
+                        }
+                      }
+                      return null;
+                    },
+                  ),
+                ],
+
+                const SizedBox(height: 18),
+
+                // 6. Champ : Mot de passe
+                _buildFieldLabel('Mot de passe'),
+                _buildCustomTextField(
+                  controller: _passwordController,
+                  hintText: '••••••••••',
+                  isPassword: true,
+                  obscureText: _obscurePassword,
+                  onToggleObscure: () {
+                    setState(() {
+                      _obscurePassword = !_obscurePassword;
+                    });
+                  },
+                  onChanged: (val) {
+                    if (_confirmPasswordController.text.isNotEmpty) {
+                      setState(() {
+                        _passwordMismatch = _confirmPasswordController.text != val;
+                      });
+                    }
+                  },
+                  validator: (v) =>
+                      v == null || v.length < 6 ? 'Le mot de passe doit comporter au moins 6 caractères' : null,
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  '8 caractères minimum, avec un chiffre.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Color(0xFF64748B),
+                  ),
+                ),
+
+                const SizedBox(height: 18),
+
+                // 7. Champ : Confirmer le mot de passe (avec gestion visuelle de l'erreur comme le screenshot)
+                _buildFieldLabel('Confirmer le mot de passe'),
+                _buildCustomTextField(
+                  controller: _confirmPasswordController,
+                  hintText: '••••••••••',
+                  isPassword: true,
+                  obscureText: _obscureConfirmPassword,
+                  hasError: _passwordMismatch,
+                  onToggleObscure: () {
+                    setState(() {
+                      _obscureConfirmPassword = !_obscureConfirmPassword;
+                    });
+                  },
+                  onChanged: (val) {
+                    setState(() {
+                      _passwordMismatch = val.isNotEmpty && val != _passwordController.text;
+                    });
+                  },
+                  validator: (v) {
+                    if (v == null || v.isEmpty) {
+                      return 'Veuillez confirmer votre mot de passe';
+                    }
+                    if (v != _passwordController.text) {
+                      return 'Les mots de passe ne correspondent pas';
+                    }
+                    return null;
+                  },
+                ),
+                if (_passwordMismatch) ...[
+                  const SizedBox(height: 6),
+                  const Row(
+                    children: [
+                      Icon(
+                        Icons.error_outline_rounded,
+                        color: Color(0xFFDC2626),
+                        size: 16,
+                      ),
+                      SizedBox(width: 6),
+                      Text(
+                        'Les mots de passe ne correspondent pas.',
+                        style: TextStyle(
+                          color: Color(0xFFDC2626),
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+
+                const SizedBox(height: 18),
+
+                // 8. Case à cocher : J'accepte les conditions d'utilisation
+                GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _acceptTerms = !_acceptTerms;
+                    });
+                  },
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Container(
+                        width: 22,
+                        height: 22,
+                        decoration: BoxDecoration(
+                          color: _acceptTerms ? const Color(0xFF0D544E) : Colors.white,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: _acceptTerms ? const Color(0xFF0D544E) : const Color(0xFFCBD5E1),
+                            width: 1.5,
+                          ),
+                        ),
+                        alignment: Alignment.center,
+                        child: _acceptTerms
+                            ? const Icon(Icons.check, size: 16, color: Colors.white)
+                            : null,
+                      ),
+                      const SizedBox(width: 10),
+                      const Expanded(
+                        child: Text(
+                          'J\'accepte les conditions d\'utilisation et la politique de confidentialité.',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Color(0xFF334155),
+                            height: 1.35,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 18),
+
+                // 9. Bannière d'information Pro (Jaune pastel comme le screenshot)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFEF3C7).withValues(alpha: 0.7),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFFFDE68A)),
+                  ),
+                  child: const Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        Icons.info_outline_rounded,
+                        color: Color(0xFFB45309),
+                        size: 20,
+                      ),
+                      SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Les profils professionnels sont validés par un administrateur avant d\'être visibles.',
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            color: Color(0xFF92400E),
+                            height: 1.4,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 22),
+
+                // 10. Bouton d'action principal : Créer mon compte (Vert foncé #0D544E)
+                SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: ElevatedButton(
+                    onPressed: _isLoading ? null : _handleSubmit,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0D544E),
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                    child: _isLoading
+                        ? const SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Text(
+                            'Créer mon compte',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.2,
+                            ),
+                          ),
+                  ),
+                ),
+
+                const SizedBox(height: 18),
+
+                // 11. Lien bas de page : Déjà inscrit ? Se connecter
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Text(
+                      'Déjà inscrit ? ',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Color(0xFF64748B),
+                      ),
+                    ),
+                    GestureDetector(
+                      onTap: () {
+                        Navigator.of(context).pushReplacement(
+                          MaterialPageRoute(
+                            builder: (_) => const LoginScreen(),
+                          ),
+                        );
+                      },
+                      child: const Text(
+                        'Se connecter',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF0D544E),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 20),
+              ],
             ),
-          ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFieldLabel(String label) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontSize: 13.5,
+          fontWeight: FontWeight.w600,
+          color: Color(0xFF0F172A),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCustomTextField({
+    required TextEditingController controller,
+    required String hintText,
+    bool isPassword = false,
+    bool? obscureText,
+    VoidCallback? onToggleObscure,
+    TextInputType? keyboardType,
+    String? Function(String?)? validator,
+    void Function(String)? onChanged,
+    bool hasError = false,
+  }) {
+    return TextFormField(
+      controller: controller,
+      obscureText: isPassword ? (obscureText ?? true) : false,
+      keyboardType: keyboardType,
+      onChanged: onChanged,
+      validator: validator,
+      style: const TextStyle(
+        fontSize: 15,
+        color: Color(0xFF0F172A),
+        fontWeight: FontWeight.w500,
+      ),
+      decoration: InputDecoration(
+        hintText: hintText,
+        hintStyle: const TextStyle(
+          color: Color(0xFF94A3B8),
+          fontSize: 14.5,
+        ),
+        filled: true,
+        fillColor: hasError ? const Color(0xFFFEF2F2) : Colors.white,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+        suffixIcon: isPassword
+            ? IconButton(
+                icon: Icon(
+                  (obscureText ?? true)
+                      ? Icons.visibility_off_outlined
+                      : Icons.visibility_outlined,
+                  color: const Color(0xFF64748B),
+                  size: 20,
+                ),
+                onPressed: onToggleObscure,
+              )
+            : null,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(
+            color: hasError ? const Color(0xFFE53935) : const Color(0xFFDDE3EA),
+            width: 1.2,
+          ),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(
+            color: hasError ? const Color(0xFFE53935) : const Color(0xFFDDE3EA),
+            width: 1.2,
+          ),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(
+            color: hasError ? const Color(0xFFE53935) : const Color(0xFF0D544E),
+            width: 1.5,
+          ),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(
+            color: Color(0xFFE53935),
+            width: 1.5,
+          ),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(
+            color: Color(0xFFE53935),
+            width: 1.5,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSegmentTab({
+    required String title,
+    required IconData icon,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          decoration: BoxDecoration(
+            color: isSelected ? Colors.white : Colors.transparent,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: isSelected
+                ? [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.04),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ]
+                : null,
+          ),
+          alignment: Alignment.center,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                size: 18,
+                color: isSelected ? const Color(0xFF0D544E) : const Color(0xFF475569),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 14.5,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                  color: isSelected ? const Color(0xFF0D544E) : const Color(0xFF475569),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:lottie/lottie.dart';
 import '../theme/app_theme.dart';
 import 'onboarding_screen.dart';
 
@@ -12,35 +13,32 @@ class SplashScreen extends StatefulWidget {
 
 class _SplashScreenState extends State<SplashScreen>
     with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _scaleAnimation;
-  late Animation<double> _opacityAnimation;
+  late AnimationController _fadeController;
+  late Animation<double> _fadeAnimation;
   Timer? _timer;
 
   @override
   void initState() {
     super.initState();
 
-    _controller = AnimationController(
+    _fadeController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1400),
+      duration: const Duration(milliseconds: 800),
     );
 
-    _scaleAnimation = Tween<double>(begin: 0.85, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOutBack),
+    _fadeAnimation = CurvedAnimation(
+      parent: _fadeController,
+      curve: Curves.easeIn,
     );
 
-    _opacityAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeIn),
-    );
+    _fadeController.forward();
 
-    _controller.forward();
-
-    _timer = Timer(const Duration(milliseconds: 2400), () {
+    // 4 seconds splash duration as requested
+    _timer = Timer(const Duration(seconds: 4), () {
       if (mounted) {
         Navigator.of(context).pushReplacement(
           PageRouteBuilder(
-            transitionDuration: const Duration(milliseconds: 600),
+            transitionDuration: const Duration(milliseconds: 500),
             pageBuilder: (_, _, _) => const OnboardingScreen(),
             transitionsBuilder: (_, animation, _, child) {
               return FadeTransition(opacity: animation, child: child);
@@ -54,82 +52,65 @@ class _SplashScreenState extends State<SplashScreen>
   @override
   void dispose() {
     _timer?.cancel();
-    _controller.dispose();
+    _fadeController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.tealPrimary,
+      backgroundColor: Colors.white,
       body: Stack(
         children: [
-          // Background subtle ambient radial glow
+          // Background subtle ambient radial gradient
           Positioned.fill(
             child: Container(
               decoration: const BoxDecoration(
                 gradient: RadialGradient(
                   center: Alignment(0, -0.1),
-                  radius: 0.9,
+                  radius: 0.95,
                   colors: [
-                    Color(0xFF147E7E),
-                    Color(0xFF0F6B6B),
-                    Color(0xFF074545),
+                    Colors.white,
+                    Color(0xFFF7FAF9),
+                    Color(0xFFEAF4F3),
                   ],
                 ),
               ),
             ),
           ),
           Center(
-            child: AnimatedBuilder(
-              animation: _controller,
-              builder: (context, child) {
-                return Opacity(
-                  opacity: _opacityAnimation.value,
-                  child: Transform.scale(
-                    scale: _scaleAnimation.value,
-                    child: child,
-                  ),
-                );
-              },
+            child: FadeTransition(
+              opacity: _fadeAnimation,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Logo container badge
-                  Container(
-                    width: 90,
-                    height: 90,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.2),
-                          blurRadius: 20,
-                          offset: const Offset(0, 10),
-                        ),
-                      ],
-                    ),
-                    alignment: Alignment.center,
-                    child: const Text(
-                      'D+',
-                      style: TextStyle(
-                        color: AppTheme.tealPrimary,
-                        fontSize: 42,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: -1,
-                      ),
+                  // Lottie Animation dar.json
+                  SizedBox(
+                    width: 250,
+                    height: 250,
+                    child: Lottie.asset(
+                      'assets/animations/dar.json',
+                      fit: BoxFit.contain,
+                      repeat: true,
+                      errorBuilder: (context, error, stackTrace) {
+                        return Image.asset(
+                          'assets/images/logo.png',
+                          width: 120,
+                          height: 120,
+                          fit: BoxFit.contain,
+                        );
+                      },
                     ),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 16),
                   // App title
                   const Text(
                     'DAR PLUS',
                     style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 30,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 2.5,
+                      color: AppTheme.tealPrimary,
+                      fontSize: 32,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 3.0,
                       fontFamily: 'sans-serif',
                     ),
                   ),
@@ -137,19 +118,23 @@ class _SplashScreenState extends State<SplashScreen>
                   // Tagline
                   Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
+                      horizontal: 18,
                       vertical: 6,
                     ),
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.12),
+                      color: AppTheme.tealPrimary.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: AppTheme.tealPrimary.withValues(alpha: 0.15),
+                        width: 1,
+                      ),
                     ),
                     child: const Text(
                       'Des professionnels à votre service',
                       style: TextStyle(
-                        color: Colors.white70,
+                        color: AppTheme.tealPrimary,
                         fontSize: 14,
-                        fontWeight: FontWeight.w400,
+                        fontWeight: FontWeight.w600,
                         letterSpacing: 0.5,
                       ),
                     ),
@@ -170,7 +155,7 @@ class _SplashScreenState extends State<SplashScreen>
                 child: CircularProgressIndicator(
                   strokeWidth: 2.5,
                   valueColor: AlwaysStoppedAnimation<Color>(
-                    Colors.white.withValues(alpha: 0.7),
+                    AppTheme.tealPrimary.withValues(alpha: 0.7),
                   ),
                 ),
               ),

@@ -2,11 +2,13 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 
 class DarPlusLogoPill extends StatelessWidget {
-  final Color badgeColor;
+  final Color? badgeColor;
+  final double size;
 
   const DarPlusLogoPill({
     super.key,
-    required this.badgeColor,
+    this.badgeColor,
+    this.size = 28,
   });
 
   @override
@@ -28,24 +30,31 @@ class DarPlusLogoPill extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Circular D+ badge
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 300),
-                width: 28,
-                height: 28,
-                decoration: BoxDecoration(
-                  color: badgeColor,
-                  shape: BoxShape.circle,
-                ),
-                alignment: Alignment.center,
-                child: const Text(
-                  'D+',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 13,
-                    fontFamily: 'sans-serif',
-                    letterSpacing: -0.5,
+              // Logo image
+              ClipRRect(
+                borderRadius: BorderRadius.circular(size / 2),
+                child: Image.asset(
+                  'assets/images/logo.png',
+                  width: size,
+                  height: size,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) => Container(
+                    width: size,
+                    height: size,
+                    decoration: BoxDecoration(
+                      color: badgeColor ?? const Color(0xFFE89838),
+                      shape: BoxShape.circle,
+                    ),
+                    alignment: Alignment.center,
+                    child: const Text(
+                      'D+',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 13,
+                        fontFamily: 'sans-serif',
+                      ),
+                    ),
                   ),
                 ),
               ),

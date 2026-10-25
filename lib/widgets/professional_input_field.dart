@@ -6,6 +6,8 @@ enum ProfessionalIconType {
   email,
   password,
   service,
+  adminKey,
+  location,
 }
 
 class ProfessionalInputField extends StatelessWidget {
@@ -31,92 +33,92 @@ class ProfessionalInputField extends StatelessWidget {
   });
 
   Widget _buildProfessionalIcon() {
+    IconData iconData;
+    Color primaryColor;
+    Color bgGradientStart;
+    Color bgGradientEnd;
+
     switch (iconType) {
       case ProfessionalIconType.user:
-        return Container(
-          width: 32,
-          height: 32,
-          margin: const EdgeInsets.only(left: 14, right: 12),
-          decoration: BoxDecoration(
-            color: const Color(0xFF4C3B71).withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          alignment: Alignment.center,
-          child: const Icon(
-            Icons.person_rounded,
-            color: Color(0xFF4C3B71),
-            size: 20,
-          ),
-        );
+        iconData = Icons.person_rounded;
+        primaryColor = const Color(0xFF0C5050);
+        bgGradientStart = const Color(0xFF0C5050).withValues(alpha: 0.14);
+        bgGradientEnd = const Color(0xFF147A7A).withValues(alpha: 0.08);
+        break;
 
       case ProfessionalIconType.phone:
-        return Container(
-          width: 32,
-          height: 32,
-          margin: const EdgeInsets.only(left: 14, right: 12),
-          decoration: BoxDecoration(
-            color: const Color(0xFF5B45B2).withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          alignment: Alignment.center,
-          child: const Icon(
-            Icons.smartphone_rounded,
-            color: Color(0xFF5B45B2),
-            size: 19,
-          ),
-        );
+        iconData = Icons.phone_iphone_rounded;
+        primaryColor = const Color(0xFF2563EB); // Royal Blue
+        bgGradientStart = const Color(0xFF2563EB).withValues(alpha: 0.14);
+        bgGradientEnd = const Color(0xFF60A5FA).withValues(alpha: 0.08);
+        break;
 
       case ProfessionalIconType.email:
-        return Container(
-          width: 32,
-          height: 32,
-          margin: const EdgeInsets.only(left: 14, right: 12),
-          decoration: BoxDecoration(
-            color: const Color(0xFF7E8BA3).withValues(alpha: 0.14),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          alignment: Alignment.center,
-          child: const Icon(
-            Icons.mail_outline_rounded,
-            color: Color(0xFF6B7280),
-            size: 19,
-          ),
-        );
+        iconData = Icons.alternate_email_rounded;
+        primaryColor = const Color(0xFF0284C7); // Cyan Teal
+        bgGradientStart = const Color(0xFF0284C7).withValues(alpha: 0.14);
+        bgGradientEnd = const Color(0xFF38BDF8).withValues(alpha: 0.08);
+        break;
 
       case ProfessionalIconType.password:
-        return Container(
-          width: 32,
-          height: 32,
-          margin: const EdgeInsets.only(left: 14, right: 12),
-          decoration: BoxDecoration(
-            color: const Color(0xFFF59E0B).withValues(alpha: 0.14),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          alignment: Alignment.center,
-          child: const Icon(
-            Icons.lock_rounded,
-            color: Color(0xFFE8834F),
-            size: 19,
-          ),
-        );
+        iconData = Icons.lock_outline_rounded;
+        primaryColor = const Color(0xFFEA580C); // Warm Orange
+        bgGradientStart = const Color(0xFFEA580C).withValues(alpha: 0.14);
+        bgGradientEnd = const Color(0xFFFB923C).withValues(alpha: 0.08);
+        break;
 
       case ProfessionalIconType.service:
-        return Container(
-          width: 32,
-          height: 32,
-          margin: const EdgeInsets.only(left: 14, right: 12),
-          decoration: BoxDecoration(
-            color: const Color(0xFF64748B).withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          alignment: Alignment.center,
-          child: const Icon(
-            Icons.build_rounded,
-            color: Color(0xFF64748B),
-            size: 18,
-          ),
-        );
+        iconData = Icons.handyman_rounded;
+        primaryColor = const Color(0xFF059669); // Emerald
+        bgGradientStart = const Color(0xFF059669).withValues(alpha: 0.14);
+        bgGradientEnd = const Color(0xFF34D399).withValues(alpha: 0.08);
+        break;
+
+      case ProfessionalIconType.adminKey:
+        iconData = Icons.admin_panel_settings_rounded;
+        primaryColor = const Color(0xFF7C3AED); // Deep Purple
+        bgGradientStart = const Color(0xFF7C3AED).withValues(alpha: 0.14);
+        bgGradientEnd = const Color(0xFFA78BFA).withValues(alpha: 0.08);
+        break;
+
+      case ProfessionalIconType.location:
+        iconData = Icons.location_on_rounded;
+        primaryColor = const Color(0xFFE11D48); // Rose
+        bgGradientStart = const Color(0xFFE11D48).withValues(alpha: 0.14);
+        bgGradientEnd = const Color(0xFFFB7185).withValues(alpha: 0.08);
+        break;
     }
+
+    return Container(
+      width: 38,
+      height: 38,
+      margin: const EdgeInsets.only(left: 12, right: 12),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [bgGradientStart, bgGradientEnd],
+        ),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: primaryColor.withValues(alpha: 0.22),
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: primaryColor.withValues(alpha: 0.08),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      alignment: Alignment.center,
+      child: Icon(
+        iconData,
+        color: primaryColor,
+        size: 20,
+      ),
+    );
   }
 
   @override
@@ -124,16 +126,16 @@ class ProfessionalInputField extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(
           color: const Color(0xFFE8E4DC),
           width: 1.2,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.02),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+            color: Colors.black.withValues(alpha: 0.025),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
           ),
         ],
       ),
@@ -145,12 +147,12 @@ class ProfessionalInputField extends StatelessWidget {
         style: const TextStyle(
           color: Color(0xFF0B1B2B),
           fontSize: 15,
-          fontWeight: FontWeight.w500,
+          fontWeight: FontWeight.w600,
           fontFamily: 'sans-serif',
         ),
         decoration: InputDecoration(
           prefixIcon: _buildProfessionalIcon(),
-          prefixIconConstraints: const BoxConstraints(minWidth: 58, minHeight: 48),
+          prefixIconConstraints: const BoxConstraints(minWidth: 62, minHeight: 52),
           hintText: hintText,
           hintStyle: TextStyle(
             color: const Color(0xFF8B98A8).withValues(alpha: 0.9),
@@ -165,7 +167,7 @@ class ProfessionalInputField extends StatelessWidget {
                     obscureText
                         ? Icons.visibility_off_outlined
                         : Icons.visibility_outlined,
-                    color: const Color(0xFF94A3B8),
+                    color: const Color(0xFF64748B),
                     size: 20,
                   ),
                   onPressed: onToggleObscure,

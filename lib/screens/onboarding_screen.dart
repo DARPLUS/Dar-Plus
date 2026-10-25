@@ -3,7 +3,7 @@ import '../theme/app_theme.dart';
 import '../widgets/dar_plus_logo.dart';
 import '../widgets/frosted_skip_button.dart';
 import '../widgets/page_indicator.dart';
-import 'home_screen.dart';
+import 'register_screen.dart';
 import 'login_screen.dart';
 
 class OnboardingModel {
@@ -70,7 +70,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
         transitionDuration: const Duration(milliseconds: 400),
-        pageBuilder: (_, _, _) => const HomeScreen(),
+        pageBuilder: (_, _, _) => const RegisterScreen(),
         transitionsBuilder: (_, animation, _, child) {
           return FadeTransition(opacity: animation, child: child);
         },
@@ -79,8 +79,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   void _goToLogin() {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const LoginScreen()),
+    Navigator.of(context).pushReplacement(
+      PageRouteBuilder(
+        transitionDuration: const Duration(milliseconds: 350),
+        pageBuilder: (_, _, _) => const LoginScreen(),
+        transitionsBuilder: (_, animation, _, child) {
+          return FadeTransition(opacity: animation, child: child);
+        },
+      ),
     );
   }
 
@@ -222,7 +228,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 ),
                 // Right Passer (Skip) Button
                 FrostedSkipButton(
-                  onTap: _goToHome,
+                  onTap: _goToLogin,
                 ),
               ],
             ),

@@ -1,4 +1,7 @@
+import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import '../services/firebase_service.dart';
 import '../theme/app_theme.dart';
 import 'admin_requests_screen.dart';
 import 'client_profile_screen.dart';
@@ -21,6 +24,64 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _currentBottomNavIndex = 0;
+  String? _clientPhotoBase64;
+
+  StreamSubscription<List<Map<String, dynamic>>>? _categoriesSub;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadProfilePhoto();
+    _listenToCategories();
+  }
+
+  void _listenToCategories() {
+    _categoriesSub = FirebaseService().streamCategories().listen((list) {
+      if (mounted && list.isNotEmpty) {
+        final activeCategories = list.where((c) => c['isActive'] == true).toList();
+        if (activeCategories.isNotEmpty) {
+          setState(() {
+            _categories.clear();
+            for (final cat in activeCategories) {
+              _categories.add({
+                'name': cat['name'],
+                'icon': cat['icon'],
+                'bgColor': cat['bgColor'],
+                'iconColor': cat['iconColor'],
+              });
+            }
+            // Always keep the "Plus" button at the end
+            _categories.add({
+              'name': 'Plus',
+              'icon': Icons.add_rounded,
+              'bgColor': const Color(0xFFF1EDE6),
+              'iconColor': const Color(0xFF64748B),
+            });
+          });
+        }
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _categoriesSub?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _loadProfilePhoto() async {
+    try {
+      final data = await FirebaseService().getCurrentUserData();
+      if (data != null && mounted) {
+        final photo = data['photoBase64'] as String?;
+        if (photo != null && photo.trim().isNotEmpty) {
+          setState(() {
+            _clientPhotoBase64 = photo.trim();
+          });
+        }
+      }
+    } catch (_) {}
+  }
   String _selectedLocation = 'Tunis, El Menzah';
 
   // 3 Quick Actions without the AI icon as requested
@@ -556,10 +617,15 @@ class _HomeScreenState extends State<HomeScreen> {
                                 color: Colors.white.withValues(alpha: 0.3),
                                 width: 2,
                               ),
-                              image: const DecorationImage(
-                                image: AssetImage('assets/images/slide_1_photo.png'),
-                                fit: BoxFit.cover,
-                              ),
+                              image: _clientPhotoBase64 != null && _clientPhotoBase64!.isNotEmpty
+                                  ? DecorationImage(
+                                      image: MemoryImage(base64Decode(_clientPhotoBase64!)),
+                                      fit: BoxFit.cover,
+                                    )
+                                  : const DecorationImage(
+                                      image: AssetImage('assets/images/slide_1_photo.png'),
+                                      fit: BoxFit.cover,
+                                    ),
                             ),
                           ),
                         ),

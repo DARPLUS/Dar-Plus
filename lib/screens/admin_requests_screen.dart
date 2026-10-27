@@ -1,4 +1,5 @@
-﻿import 'dart:convert';
+import 'dart:async';
+import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
@@ -43,11 +44,17 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
   String _currentAdminPhone = '+216 71 000 000';
   String? _adminPhotoBase64;
   bool _forceDialogShown = false;
+  bool _adminCanManageCategories = false;
+  StreamSubscription<List<Map<String, dynamic>>>? _categoriesSub;
+  StreamSubscription<Map<String, dynamic>>? _globalSettingsSub;
+
   bool get isSuperAdmin =>
       _currentAdminRole.toLowerCase() == 'super_admin' ||
       _currentAdminEmail.trim().toLowerCase() == 'admin@darplus.tn' ||
       widget.adminEmail?.trim().toLowerCase() == 'admin@darplus.tn' ||
       widget.adminRole.toLowerCase() == 'super_admin';
+
+  bool get canManageCategories => isSuperAdmin || _adminCanManageCategories;
   // Categories list (8 catégories · 7 actives)
   final List<Map<String, dynamic>> _adminCategories = [
     {
@@ -136,6 +143,21 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
     }
     NotificationService().markAllAsRead();
     _loadRealAdminProfile();
+    _categoriesSub = FirebaseService().streamCategories().listen((list) {
+      if (mounted && list.isNotEmpty) {
+        setState(() {
+          _adminCategories.clear();
+          _adminCategories.addAll(list);
+        });
+      }
+    });
+    _globalSettingsSub = FirebaseService().streamGlobalSettings().listen((settings) {
+      if (mounted) {
+        setState(() {
+          _adminCanManageCategories = settings['adminCanManageCategories'] == true;
+        });
+      }
+    });
     if (widget.mustChangePassword) {
       _forceDialogShown = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -175,6 +197,8 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
   }
   @override
   void dispose() {
+    _categoriesSub?.cancel();
+    _globalSettingsSub?.cancel();
     _userSearchController.dispose();
     super.dispose();
   }
@@ -285,7 +309,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
     );
   }
   void _showAddCategoryDialog() {
-    if (!isSuperAdmin) {
+    if (!canManageCategories) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Seul le Super Admin (ou admin autorisé via paramètres globaux) peut ajouter des catégories.'),
@@ -297,146 +321,230 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
     final nameCtrl = TextEditingController();
     final prosCtrl = TextEditingController(text: '0');
     final formKey = GlobalKey<FormState>();
+    bool isSaving = false;
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: const Row(
-          children: [
-            Icon(Icons.add_circle_rounded, color: Color(0xFFF5A623), size: 26),
-            SizedBox(width: 10),
-            Text('Nouvelle catégorie', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-          ],
-        ),
-        content: Form(
-          key: formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          title: const Row(
             children: [
-              TextFormField(
-                controller: nameCtrl,
-                decoration: InputDecoration(
-                  labelText: 'Nom de la catégorie (ex: Menuiserie)',
-                  prefixIcon: const Icon(Icons.category_outlined),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
-                ),
-                validator: (v) => v == null || v.trim().isEmpty ? 'Nom requis' : null,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: prosCtrl,
-                keyboardType: TextInputType.number,
-                decoration: InputDecoration(
-                  labelText: 'Nombre initial de professionnels',
-                  prefixIcon: const Icon(Icons.people_outline_rounded),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
-                ),
-              ),
+              Icon(Icons.add_circle_rounded, color: Color(0xFFF5A623), size: 26),
+              SizedBox(width: 10),
+              Text('Nouvelle catégorie', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
             ],
           ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Annuler')),
-          ElevatedButton(
-            onPressed: () {
-              if (!formKey.currentState!.validate()) return;
-              setState(() {
-                _adminCategories.add({
-                  'id': 'cat_${DateTime.now().millisecondsSinceEpoch}',
-                  'name': nameCtrl.text.trim(),
-                  'pros': int.tryParse(prosCtrl.text.trim()) ?? 0,
-                  'isActive': true,
-                  'icon': Icons.handyman_rounded,
-                  'bgColor': const Color(0xFFE8F0FE),
-                  'iconColor': const Color(0xFF1E40AF),
-                });
-              });
-              Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Catégorie "${nameCtrl.text}" ajoutée avec succès !'),
-                  backgroundColor: const Color(0xFF0D544E),
+          content: Form(
+            key: formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  controller: nameCtrl,
+                  decoration: InputDecoration(
+                    labelText: 'Nom de la catégorie (ex: Menuiserie)',
+                    prefixIcon: const Icon(Icons.category_outlined),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                  ),
+                  validator: (v) => v == null || v.trim().isEmpty ? 'Nom requis' : null,
                 ),
-              );
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFF5A623),
-              foregroundColor: Colors.black,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: prosCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    labelText: 'Nombre initial de professionnels',
+                    prefixIcon: const Icon(Icons.people_outline_rounded),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                  ),
+                ),
+              ],
             ),
-            child: const Text('Ajouter', style: TextStyle(fontWeight: FontWeight.bold)),
           ),
-        ],
+          actions: [
+            TextButton(
+              onPressed: isSaving ? null : () => Navigator.pop(ctx),
+              child: const Text('Annuler'),
+            ),
+            ElevatedButton(
+              onPressed: isSaving
+                  ? null
+                  : () async {
+                      if (!formKey.currentState!.validate()) return;
+                      setDialogState(() => isSaving = true);
+                      final name = nameCtrl.text.trim();
+                      final pros = int.tryParse(prosCtrl.text.trim()) ?? 0;
+                      final ok = await FirebaseService().addCategory(
+                        name: name,
+                        pros: pros,
+                        isActive: true,
+                        icon: Icons.handyman_rounded,
+                        bgColor: const Color(0xFFE8F0FE),
+                        iconColor: const Color(0xFF1E40AF),
+                      );
+                      if (ctx.mounted) Navigator.pop(ctx);
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(ok
+                                ? 'Catégorie "$name" enregistrée avec succès !'
+                                : 'Erreur lors de l\'ajout de la catégorie'),
+                            backgroundColor: ok ? const Color(0xFF0D544E) : Colors.redAccent,
+                          ),
+                        );
+                      }
+                    },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFF5A623),
+                foregroundColor: Colors.black,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: isSaving
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
+                    )
+                  : const Text('Ajouter', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
       ),
     );
   }
   void _showEditCategoryDialog(Map<String, dynamic> cat) {
+    if (!canManageCategories) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Action réservée au Super Admin ou admin autorisé.'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
     final nameCtrl = TextEditingController(text: cat['name']);
     final prosCtrl = TextEditingController(text: '${cat['pros']}');
     final formKey = GlobalKey<FormState>();
+    bool isSaving = false;
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: Row(
-          children: [
-            const Icon(Icons.edit_note_rounded, color: Color(0xFF0D544E), size: 26),
-            const SizedBox(width: 10),
-            Text('Modifier ${cat['name']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-          ],
-        ),
-        content: Form(
-          key: formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          title: Row(
             children: [
-              TextFormField(
-                controller: nameCtrl,
-                decoration: InputDecoration(
-                  labelText: 'Nom du métier',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
-                ),
-                validator: (v) => v == null || v.trim().isEmpty ? 'Nom requis' : null,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: prosCtrl,
-                keyboardType: TextInputType.number,
-                decoration: InputDecoration(
-                  labelText: 'Nombre de professionnels associés',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+              const Icon(Icons.edit_note_rounded, color: Color(0xFF0D544E), size: 26),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Modifier ${cat['name']}',
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              setState(() {
-                _adminCategories.removeWhere((c) => c['id'] == cat['id']);
-              });
-              Navigator.pop(ctx);
-            },
-            child: const Text('Supprimer', style: TextStyle(color: Color(0xFFDC2626))),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              if (!formKey.currentState!.validate()) return;
-              setState(() {
-                cat['name'] = nameCtrl.text.trim();
-                cat['pros'] = int.tryParse(prosCtrl.text.trim()) ?? cat['pros'];
-              });
-              Navigator.pop(ctx);
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF0D544E),
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          content: Form(
+            key: formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  controller: nameCtrl,
+                  decoration: InputDecoration(
+                    labelText: 'Nom du métier',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                  ),
+                  validator: (v) => v == null || v.trim().isEmpty ? 'Nom requis' : null,
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: prosCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    labelText: 'Nombre de professionnels associés',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                  ),
+                ),
+              ],
             ),
-            child: const Text('Enregistrer'),
           ),
-        ],
+          actions: [
+            TextButton(
+              onPressed: isSaving
+                  ? null
+                  : () async {
+                      final confirm = await showDialog<bool>(
+                        context: context,
+                        builder: (cctx) => AlertDialog(
+                          title: const Text('Confirmer la suppression'),
+                          content: Text('Voulez-vous vraiment supprimer "${cat['name']}" ?'),
+                          actions: [
+                            TextButton(onPressed: () => Navigator.pop(cctx, false), child: const Text('Annuler')),
+                            TextButton(
+                              onPressed: () => Navigator.pop(cctx, true),
+                              child: const Text('Supprimer', style: TextStyle(color: Colors.red)),
+                            ),
+                          ],
+                        ),
+                      );
+                      if (confirm != true) return;
+                      setDialogState(() => isSaving = true);
+                      final ok = await FirebaseService().deleteCategory(cat['id'] as String);
+                      if (ctx.mounted) Navigator.pop(ctx);
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(ok
+                                ? 'Catégorie supprimée avec succès.'
+                                : 'Erreur lors de la suppression.'),
+                            backgroundColor: ok ? const Color(0xFF0D544E) : Colors.redAccent,
+                          ),
+                        );
+                      }
+                    },
+              child: const Text('Supprimer', style: TextStyle(color: Color(0xFFDC2626))),
+            ),
+            ElevatedButton(
+              onPressed: isSaving
+                  ? null
+                  : () async {
+                      if (!formKey.currentState!.validate()) return;
+                      setDialogState(() => isSaving = true);
+                      final updatedName = nameCtrl.text.trim();
+                      final updatedPros = int.tryParse(prosCtrl.text.trim()) ?? (cat['pros'] as int? ?? 0);
+                      final ok = await FirebaseService().updateCategory(
+                        cat['id'] as String,
+                        name: updatedName,
+                        pros: updatedPros,
+                      );
+                      if (ctx.mounted) Navigator.pop(ctx);
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(ok
+                                ? 'Catégorie modifiée avec succès.'
+                                : 'Erreur lors de la modification.'),
+                            backgroundColor: ok ? const Color(0xFF0D544E) : Colors.redAccent,
+                          ),
+                        );
+                      }
+                    },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF0D544E),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: isSaving
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Text('Enregistrer'),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -534,6 +642,159 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
       ),
     );
   }
+  void _showChangePasswordDialog() {
+    final currentPassCtrl = TextEditingController();
+    final newPassCtrl = TextEditingController();
+    final confirmPassCtrl = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+    bool isSaving = false;
+    String? errorMessage;
+    bool obscureCurrent = true;
+    bool obscureNew = true;
+    bool obscureConfirm = true;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+          title: const Row(
+            children: [
+              Icon(Icons.lock_reset_rounded, color: Color(0xFFD97706)),
+              SizedBox(width: 8),
+              Text('Changer le mot de passe', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Form(
+              key: formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextFormField(
+                    controller: currentPassCtrl,
+                    obscureText: obscureCurrent,
+                    decoration: InputDecoration(
+                      labelText: 'Mot de passe actuel',
+                      prefixIcon: const Icon(Icons.lock_outline_rounded, size: 20),
+                      suffixIcon: IconButton(
+                        icon: Icon(obscureCurrent ? Icons.visibility_off : Icons.visibility, size: 20),
+                        onPressed: () => setDialogState(() => obscureCurrent = !obscureCurrent),
+                      ),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                    ),
+                    validator: (v) => v == null || v.trim().isEmpty ? 'Mot de passe actuel requis' : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: newPassCtrl,
+                    obscureText: obscureNew,
+                    decoration: InputDecoration(
+                      labelText: 'Nouveau mot de passe',
+                      prefixIcon: const Icon(Icons.key_rounded, size: 20),
+                      suffixIcon: IconButton(
+                        icon: Icon(obscureNew ? Icons.visibility_off : Icons.visibility, size: 20),
+                        onPressed: () => setDialogState(() => obscureNew = !obscureNew),
+                      ),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                    ),
+                    validator: (v) {
+                      if (v == null || v.trim().isEmpty) return 'Nouveau mot de passe requis';
+                      if (v.trim().length < 6) return 'Minimum 6 caractères';
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: confirmPassCtrl,
+                    obscureText: obscureConfirm,
+                    decoration: InputDecoration(
+                      labelText: 'Confirmer le mot de passe',
+                      prefixIcon: const Icon(Icons.key_rounded, size: 20),
+                      suffixIcon: IconButton(
+                        icon: Icon(obscureConfirm ? Icons.visibility_off : Icons.visibility, size: 20),
+                        onPressed: () => setDialogState(() => obscureConfirm = !obscureConfirm),
+                      ),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                    ),
+                    validator: (v) {
+                      if (v != newPassCtrl.text) return 'Les mots de passe ne correspondent pas';
+                      return null;
+                    },
+                  ),
+                  if (errorMessage != null) ...[
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEE2E2),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.error_outline_rounded, color: Color(0xFFDC2626), size: 18),
+                          const SizedBox(width: 8),
+                          Expanded(child: Text(errorMessage!, style: const TextStyle(color: Color(0xFFDC2626), fontSize: 13))),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: isSaving ? null : () => Navigator.pop(ctx),
+              child: const Text('Annuler', style: TextStyle(color: Color(0xFF64748B))),
+            ),
+            ElevatedButton(
+              onPressed: isSaving
+                  ? null
+                  : () async {
+                      if (!formKey.currentState!.validate()) return;
+                      setDialogState(() {
+                        isSaving = true;
+                        errorMessage = null;
+                      });
+
+                      final messenger = ScaffoldMessenger.of(context);
+                      final result = await FirebaseService().changePassword(
+                        currentPassword: currentPassCtrl.text.trim(),
+                        newPassword: newPassCtrl.text.trim(),
+                      );
+
+                      if (result['success'] == true) {
+                        if (ctx.mounted) Navigator.pop(ctx);
+                        messenger.showSnackBar(
+                          const SnackBar(
+                            content: Text('Mot de passe mis à jour avec succès !'),
+                            backgroundColor: Color(0xFF10B981),
+                          ),
+                        );
+                      } else {
+                        setDialogState(() {
+                          isSaving = false;
+                          errorMessage = result['message'] as String?;
+                        });
+                      }
+                    },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF0D544E),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: isSaving
+                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : const Text('Mettre à jour'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _showEditAdminProfileDialog() {
     final nameCtrl = TextEditingController(text: _currentAdminName);
     final emailCtrl = TextEditingController(text: _currentAdminEmail);
@@ -567,7 +828,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     const Text(
-                      'Modifiez vos informations administratives. Les modifications seront enregistrées dans Firebase.',
+                      'Modifiez vos informations administratives.',
                       style: TextStyle(fontSize: 12.5, color: Color(0xFF64748B)),
                     ),
                     const SizedBox(height: 16),
@@ -636,7 +897,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                         if (mounted && context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
-                              content: Text('Profil Administrateur mis à jour avec succès dans Firebase !'),
+                              content: Text('Profil Administrateur mis à jour avec succès !'),
                               backgroundColor: Color(0xFF10B981),
                             ),
                           );
@@ -1051,7 +1312,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Le compte de $name a été activé dans Firebase.', style: const TextStyle(fontSize: 13.5, color: Color(0xFF475569))),
+            Text('Le compte de $name a été activé.', style: const TextStyle(fontSize: 13.5, color: Color(0xFF475569))),
             const SizedBox(height: 14),
             Container(
               width: double.infinity,
@@ -1106,6 +1367,121 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
       ),
     );
   }
+  void _showApproveProDialog(ProApplication app) {
+    bool isApproving = false;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          title: const Row(
+            children: [
+              Icon(Icons.verified_rounded, color: Color(0xFF10B981), size: 26),
+              SizedBox(width: 10),
+              Text('Valider la candidature', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              RichText(
+                text: TextSpan(
+                  style: const TextStyle(fontSize: 14, color: Color(0xFF334155)),
+                  children: [
+                    const TextSpan(text: 'Voulez-vous valider la candidature de '),
+                    TextSpan(
+                      text: app.fullName,
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const TextSpan(text: ' ('),
+                    TextSpan(
+                      text: app.serviceType,
+                      style: const TextStyle(color: Color(0xFF0D544E), fontWeight: FontWeight.w600),
+                    ),
+                    const TextSpan(text: ') ?'),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFECFDF5),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFF6EE7B7)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.mark_email_read_rounded, color: Color(0xFF059669), size: 20),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Un email d\'acceptation sera automatiquement envoyé à ${app.email}.',
+                        style: const TextStyle(fontSize: 12.5, color: Color(0xFF065F46)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: isApproving ? null : () => Navigator.pop(ctx),
+              child: const Text('Annuler', style: TextStyle(color: Color(0xFF64748B))),
+            ),
+            ElevatedButton(
+              onPressed: isApproving
+                  ? null
+                  : () async {
+                      setDialogState(() => isApproving = true);
+                      final messenger = ScaffoldMessenger.of(context);
+                      try {
+                        final success = await FirebaseService().approveProApplication(app.id, proApp: app);
+                        if (ctx.mounted) Navigator.pop(ctx);
+                        if (success) {
+                          messenger.showSnackBar(
+                            SnackBar(
+                              content: Text('Candidature de ${app.fullName} validée ! Email d\'acceptation envoyé.'),
+                              backgroundColor: const Color(0xFF10B981),
+                            ),
+                          );
+                          setState(() {});
+                        } else {
+                          messenger.showSnackBar(
+                            const SnackBar(
+                              content: Text('Erreur lors de la validation. Réessayez.'),
+                              backgroundColor: Color(0xFFDC2626),
+                            ),
+                          );
+                        }
+                      } catch (e) {
+                        if (ctx.mounted) Navigator.pop(ctx);
+                        messenger.showSnackBar(
+                          SnackBar(
+                            content: Text('Erreur : $e'),
+                            backgroundColor: const Color(0xFFDC2626),
+                          ),
+                        );
+                      }
+                    },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF0D544E),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: isApproving
+                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : const Text('Confirmer la validation'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _showRejectProDialog(ProApplication app) {
     final reasonCtrl = TextEditingController();
     final formKey = GlobalKey<FormState>();
@@ -1261,15 +1637,29 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
         title: Row(
           children: [
-            CircleAvatar(
-              backgroundColor: const Color(0xFF0D544E).withValues(alpha: 0.12),
-              child: Text(
-                fullName.isNotEmpty ? fullName[0].toUpperCase() : 'U',
-                style: const TextStyle(
-                  color: Color(0xFF0D544E),
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
+            Builder(
+              builder: (context) {
+                final userPhoto = user['photoBase64'] as String?;
+                if (userPhoto != null && userPhoto.isNotEmpty) {
+                  try {
+                    return CircleAvatar(
+                      radius: 20,
+                      backgroundColor: const Color(0xFF0D544E).withValues(alpha: 0.12),
+                      backgroundImage: MemoryImage(base64Decode(userPhoto)),
+                    );
+                  } catch (_) {}
+                }
+                return CircleAvatar(
+                  backgroundColor: const Color(0xFF0D544E).withValues(alpha: 0.12),
+                  child: Text(
+                    fullName.isNotEmpty ? fullName[0].toUpperCase() : 'U',
+                    style: const TextStyle(
+                      color: Color(0xFF0D544E),
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                );
+              },
             ),
             const SizedBox(width: 10),
             Expanded(
@@ -1488,9 +1878,9 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                 _buildUsersTab(),
                 // Tab 2: VALIDATIONS (EXACT MATCH TO SCREENSHOT)
                 _buildValidationsTab(allList),
-                // Tab 3: CAT�?GORIES (EXACT MATCH TO SCREENSHOT)
+                // Tab 3: CATÉGORIES (EXACT MATCH TO SCREENSHOT)
                 _buildCategoriesTab(),
-                // Tab 4: PROFIL ADMIN (MODIFIER PROFIL & LOGOUT) - RECOMMAND�? & AJOUT�?
+                // Tab 4: PROFIL ADMIN (MODIFIER PROFIL & LOGOUT) - RECOMMANDÉ & AJOUTÉ
                 _buildAdminProfileTab(),
                 // Tab 5: SUPERVISION (ACCESSIBLE VIA MENU / DASHBOARD)
                 _buildSupervisionTab(),
@@ -1617,22 +2007,42 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
               const Spacer(),
               GestureDetector(
                 onTap: () => setState(() => _currentBottomNavIndex = 4),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF0F172A),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: const Text(
-                    'Admin',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
+                child: Row(
+                  children: [
+                    if (_adminPhotoBase64 != null && _adminPhotoBase64!.isNotEmpty)
+                      CircleAvatar(
+                        radius: 17,
+                        backgroundColor: const Color(0xFFD7F3EA),
+                        backgroundImage: MemoryImage(base64Decode(_adminPhotoBase64!)),
+                      )
+                    else
+                      CircleAvatar(
+                        radius: 17,
+                        backgroundColor: const Color(0xFF0D544E),
+                        child: Text(
+                          _currentAdminName.isNotEmpty ? _currentAdminName[0].toUpperCase() : 'A',
+                          style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: isSuperAdmin ? const Color(0xFFD97706) : const Color(0xFF0F172A),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        isSuperAdmin ? 'Super Admin' : 'Admin',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 11.5,
+                        ),
+                      ),
                     ),
-                  ),
+                  ],
                 ),
-              ),
+              )
             ],
           ),
           const SizedBox(height: 20),
@@ -1723,12 +2133,12 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
             ),
           ),
           const SizedBox(height: 24),
-          // �? traiter
+          // À traiter
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text(
-                '�? traiter',
+                'À traiter',
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
@@ -2148,17 +2558,31 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
         children: [
           Row(
             children: [
-              CircleAvatar(
-                radius: 22,
-                backgroundColor: roleColor.withValues(alpha: 0.12),
-                child: Text(
-                  _getInitials(fullName),
-                  style: TextStyle(
-                    color: roleColor,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                  ),
-                ),
+              Builder(
+                builder: (context) {
+                  final userPhoto = user['photoBase64'] as String?;
+                  if (userPhoto != null && userPhoto.isNotEmpty) {
+                    try {
+                      return CircleAvatar(
+                        radius: 22,
+                        backgroundColor: roleColor.withValues(alpha: 0.12),
+                        backgroundImage: MemoryImage(base64Decode(userPhoto)),
+                      );
+                    } catch (_) {}
+                  }
+                  return CircleAvatar(
+                    radius: 22,
+                    backgroundColor: roleColor.withValues(alpha: 0.12),
+                    child: Text(
+                      _getInitials(fullName),
+                      style: TextStyle(
+                        color: roleColor,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                    ),
+                  );
+                },
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -2364,7 +2788,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
             children: [
               _buildValidationSubTabItem(
                 index: 0,
-                label: '�? valider',
+                label: 'À valider',
                 badgeCount: pendingList.length,
                 isSelected: _selectedValidationTab == 0,
               ),
@@ -2637,7 +3061,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                 child: SizedBox(
                   height: 46,
                   child: ElevatedButton(
-                    onPressed: () => _showRejectProDialog(app),
+                    onPressed: app.status == 'valide' ? null : () => _showApproveProDialog(app),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF0D544E),
                       foregroundColor: Colors.white,
@@ -2694,7 +3118,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
       ),
     );
   }
-  // ================= TAB 3: CAT�?GORIES (EXACT DESIGN MATCH TO LATEST SCREENSHOT) =================
+  // ================= TAB 3: CATÉGORIES (EXACT DESIGN MATCH TO LATEST SCREENSHOT) =================
   Widget _buildCategoriesTab() {
     final activeCount = _adminCategories.where((c) => c['isActive'] == true).length;
     final totalCount = _adminCategories.length;
@@ -2791,7 +3215,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                                 const SizedBox(height: 2),
                                 Text(
                                   isActive
-                                      ? '${cat['pros']} professionnels'
+                                      ? '${cat['pros']} professionnel${(cat['pros'] as int? ?? 0) > 1 ? 's' : ''}'
                                       : 'Désactivée',
                                   style: TextStyle(
                                     fontSize: 12.5,
@@ -2803,6 +3227,25 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                               ],
                             ),
                           ),
+                          // Badge compteur pros
+                          if (isActive) ...[
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFD7F3EA),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Text(
+                                '${cat['pros'] as int? ?? 0}',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF0D544E),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                          ],
                           // Pencil Edit button
                           IconButton(
                             icon: const Icon(Icons.edit_outlined,
@@ -2817,10 +3260,20 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                             activeThumbColor: Colors.white,
                             inactiveTrackColor: const Color(0xFFCBD5E1),
                             inactiveThumbColor: Colors.white,
-                            onChanged: (val) {
+                            onChanged: (val) async {
+                              if (!canManageCategories) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Action non autorisée.'),
+                                    backgroundColor: Colors.redAccent,
+                                  ),
+                                );
+                                return;
+                              }
                               setState(() {
                                 cat['isActive'] = val;
                               });
+                              await FirebaseService().toggleCategoryStatus(cat['id'] as String, val);
                             },
                           ),
                         ],
@@ -3041,18 +3494,9 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                   ),
                   title: const Text('Sécurité & Mot de passe',
                       style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14.5)),
-                  subtitle: const Text('Envoyer un email de réinitialisation sécurisé'),
+                  subtitle: const Text('Modifier votre mot de passe directement'),
                   trailing: const Icon(Icons.chevron_right_rounded),
-                  onTap: () async {
-                    final messenger = ScaffoldMessenger.of(context);
-                    await FirebaseService().resetPassword(_currentAdminEmail);
-                    messenger.showSnackBar(
-                      SnackBar(
-                        content: Text('Email de réinitialisation envoyé à $_currentAdminEmail !'),
-                        backgroundColor: const Color(0xFF0D544E),
-                      ),
-                    );
-                  },
+                  onTap: _showChangePasswordDialog,
                 ),
                 const Divider(height: 1, indent: 64),
                 if (isSuperAdmin) ...[
@@ -3064,7 +3508,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                     ),
                     title: const Text('Créer un nouvel administrateur',
                         style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14.5)),
-                    subtitle: const Text('Ajouter un compte admin dans Firebase'),
+                    subtitle: const Text('Ajouter un nouveau compte administrateur'),
                     trailing: const Icon(Icons.chevron_right_rounded),
                     onTap: _showNewAdminDialog,
                   ),

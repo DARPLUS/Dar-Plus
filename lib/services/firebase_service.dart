@@ -567,6 +567,15 @@ class FirebaseService {
             _localUsers[old.email.toLowerCase()]!['isApproved'] = true;
             _localUsers[old.email.toLowerCase()]!['status'] = 'valide';
           }
+
+          // Envoyer l'email d'acceptation au professionnel (fallback local)
+          try {
+            await EmailService.sendProApprovedEmail(
+              toEmail: old.email,
+              proName: old.fullName,
+              serviceType: old.serviceType,
+            );
+          } catch (_) {}
         }
         return true;
       }
@@ -1622,9 +1631,33 @@ class FirebaseService {
           return _defaultCategories.map((c) => _mapToCategoryModel(c)).toList();
         }
 
+        // Compter les pros validés par serviceType en une seule requête
+        final Map<String, int> proCountByService = {};
+        try {
+          final prosSnap = await FirebaseFirestore.instance
+              .collection('users')
+              .where('role', isEqualTo: 'professionnel')
+              .where('isApproved', isEqualTo: true)
+              .get();
+          for (final doc in prosSnap.docs) {
+            final serviceType = (doc.data()['serviceType'] as String? ?? '').trim();
+            if (serviceType.isNotEmpty) {
+              proCountByService[serviceType] = (proCountByService[serviceType] ?? 0) + 1;
+            }
+          }
+        } catch (_) {}
+
         return snapshot.docs.map((doc) {
           final data = doc.data();
           data['id'] = doc.id;
+          final catName = (data['name'] as String? ?? '').trim();
+          // Recherche insensible à la casse pour matcher nom catégorie ↔ serviceType
+          final realCount = proCountByService.entries
+              .where((e) => e.key.toLowerCase() == catName.toLowerCase() ||
+                            e.key.toLowerCase().contains(catName.toLowerCase()) ||
+                            catName.toLowerCase().contains(e.key.toLowerCase()))
+              .fold<int>(0, (acc, e) => acc + e.value);
+          data['pros'] = realCount > 0 ? realCount : (data['pros'] ?? 0);
           return _mapToCategoryModel(data);
         }).toList();
       });

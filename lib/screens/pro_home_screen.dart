@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import 'login_screen.dart';
@@ -20,6 +21,27 @@ class ProHomeScreen extends StatefulWidget {
 class _ProHomeScreenState extends State<ProHomeScreen> {
   bool _isAvailable = true;
   int _currentBottomNavIndex = 0;
+  String? _proPhotoBase64;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadProPhoto();
+  }
+
+  Future<void> _loadProPhoto() async {
+    try {
+      final data = await FirebaseService().getCurrentUserData();
+      if (data != null && mounted) {
+        final photo = data['photoBase64'] as String?;
+        if (photo != null && photo.trim().isNotEmpty) {
+          setState(() {
+            _proPhotoBase64 = photo.trim();
+          });
+        }
+      }
+    } catch (_) {}
+  }
 
   // Interventions data matching screenshot
   final List<Map<String, dynamic>> _interventions = [
@@ -162,18 +184,31 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                 children: [
                   ClipRRect(
                     borderRadius: BorderRadius.circular(16),
-                    child: Image.asset(
-                      'assets/images/slide_1_photo.png',
-                      width: 50,
-                      height: 50,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, _, _) => Container(
-                        width: 50,
-                        height: 50,
-                        color: const Color(0xFF163E3A),
-                        child: const Icon(Icons.person, color: Colors.white),
-                      ),
-                    ),
+                    child: _proPhotoBase64 != null && _proPhotoBase64!.isNotEmpty
+                        ? Image.memory(
+                            base64Decode(_proPhotoBase64!),
+                            width: 50,
+                            height: 50,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, _, _) => Container(
+                              width: 50,
+                              height: 50,
+                              color: const Color(0xFF163E3A),
+                              child: const Icon(Icons.person, color: Colors.white),
+                            ),
+                          )
+                        : Image.asset(
+                            'assets/images/slide_1_photo.png',
+                            width: 50,
+                            height: 50,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, _, _) => Container(
+                              width: 50,
+                              height: 50,
+                              color: const Color(0xFF163E3A),
+                              child: const Icon(Icons.person, color: Colors.white),
+                            ),
+                          ),
                   ),
                   Positioned(
                     right: -3,

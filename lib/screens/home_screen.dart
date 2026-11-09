@@ -10,6 +10,7 @@ import '../providers/theme_provider.dart';
 import '../providers/locale_provider.dart';
 import 'client_profile_screen.dart';
 import 'catalog_search_screen.dart';
+import 'urgency_screen.dart';
 import 'service_detail_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -669,12 +670,21 @@ class _HomeScreenState extends State<HomeScreen> {
                       color: Colors.transparent,
                       child: InkWell(
                         onTap: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Action : ${action['title']}'),
-                              backgroundColor: color,
-                            ),
-                          );
+                          if (action['title'] == 'Urgence') {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const UrgencyScreen(),
+                              ),
+                            );
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Action : ${action['title']}'),
+                                backgroundColor: color,
+                              ),
+                            );
+                          }
                         },
                         borderRadius: BorderRadius.circular(18),
                         child: Column(

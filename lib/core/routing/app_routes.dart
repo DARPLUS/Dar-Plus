@@ -11,8 +11,10 @@ import '../../screens/catalog_search_screen.dart';
 import '../../screens/service_detail_screen.dart';
 import '../../screens/checkout_screen.dart';
 import '../../screens/payment_status_screen.dart';
+import '../../screens/payment_history_screen.dart';
 import '../../screens/bookings_screen.dart';
 import '../../screens/booking_detail_screen.dart';
+import '../../screens/urgency_screen.dart';
 
 class AppRoutes {
   static const String splash = '/';
@@ -27,8 +29,10 @@ class AppRoutes {
   static const String serviceDetail = '/service-detail';
   static const String checkout = '/checkout';
   static const String paymentStatus = '/payment-status';
+  static const String paymentHistory = '/payment-history';
   static const String bookings = '/bookings';
   static const String bookingDetail = '/booking-detail';
+  static const String urgency = '/urgency';
 
   static Route<dynamic> onGenerateRoute(RouteSettings settings) {
     switch (settings.name) {
@@ -112,6 +116,9 @@ class AppRoutes {
           builder: (_) => BookingDetailScreen(booking: booking),
         );
 
+      case urgency:
+        return MaterialPageRoute(builder: (_) => const UrgencyScreen());
+
       case checkout:
         final args = settings.arguments as Map<String, dynamic>? ?? {};
         return MaterialPageRoute(
@@ -133,6 +140,11 @@ class AppRoutes {
             paymentId: args['paymentId'] as String? ?? '',
             autoSimulateServerResponse: args['autoSimulate'] as bool? ?? false,
           ),
+        );
+
+      case paymentHistory:
+        return MaterialPageRoute(
+          builder: (_) => const PaymentHistoryScreen(),
         );
 
       default:

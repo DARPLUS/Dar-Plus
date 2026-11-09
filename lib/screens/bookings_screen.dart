@@ -467,18 +467,28 @@ class _BookingCard extends StatelessWidget {
       builder: (ctx) => AlertDialog(
         shape:
             RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text(context.tr('booking_cancel_confirm'),
-            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+        title: Row(
+          children: [
+            const Icon(Icons.warning_amber_rounded,
+                color: Color(0xFFDC2626), size: 24),
+            const SizedBox(width: 8),
+            Text(context.tr('booking_cancel_confirm'),
+                style: const TextStyle(
+                    fontSize: 16, fontWeight: FontWeight.bold)),
+          ],
+        ),
         content: Text(
-          context.tr('booking_cancelled_success'),
-          style: TextStyle(color: AppTheme.subtitleColorOf(context)),
+          'Voulez-vous vraiment annuler cette réservation ? Cette action est irréversible.',
+          style: TextStyle(
+              fontSize: 14,
+              color: AppTheme.subtitleColorOf(context)),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
             child: Text(context.tr('cancel'),
-                style:
-                    TextStyle(color: AppTheme.subtitleColorOf(context))),
+                style: TextStyle(
+                    color: AppTheme.subtitleColorOf(context))),
           ),
           ElevatedButton(
             onPressed: () async {

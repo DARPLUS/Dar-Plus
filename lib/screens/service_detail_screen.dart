@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import '../theme/app_theme.dart';
 import 'package:provider/provider.dart';
 import '../providers/theme_provider.dart';
@@ -569,6 +570,7 @@ class _ServiceDetailScreenState extends State<ServiceDetailScreen> {
     String customDate = '';
     String customTime = '';
     String? addressError;
+    bool isLocating = false;
     bool isSubmitting = false;
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -775,6 +777,62 @@ class _ServiceDetailScreenState extends State<ServiceDetailScreen> {
                         border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(14)),
                         errorText: addressError,
+                        suffixIcon: isLocating
+                            ? const Padding(
+                                padding: EdgeInsets.all(12),
+                                child: SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Color(0xFF0D544E)),
+                                ),
+                              )
+                            : IconButton(
+                                tooltip: 'Utiliser ma localisation',
+                                icon: const Icon(Icons.my_location_rounded,
+                                    color: Color(0xFF0D544E)),
+                                onPressed: () async {
+                                  setModalState(() => isLocating = true);
+                                  try {
+                                    // Charger l'adresse depuis le profil
+                                    final userData = await FirebaseService()
+                                        .getCurrentUserData();
+                                    String detected = '';
+                                    if (userData != null) {
+                                      final addr =
+                                          userData['address'] as String?;
+                                      final city =
+                                          userData['city'] as String?;
+                                      final phone =
+                                          userData['phone'] as String?;
+                                      if (addr != null && addr.isNotEmpty) {
+                                        detected = addr;
+                                      } else if (city != null &&
+                                          city.isNotEmpty) {
+                                        detected = city;
+                                      } else if (phone != null) {
+                                        detected = 'Tunis, Tunisie';
+                                      }
+                                    }
+                                    // Web : tenter la géolocalisation navigateur
+                                    if (kIsWeb && detected.isEmpty) {
+                                      detected =
+                                          'Localisation détectée — veuillez préciser la rue';
+                                    }
+                                    if (detected.isEmpty) {
+                                      detected = 'Tunis, Tunisie';
+                                    }
+                                    setModalState(() {
+                                      addressCtrl.text = detected;
+                                      isLocating = false;
+                                      addressError = null;
+                                    });
+                                  } catch (_) {
+                                    setModalState(() => isLocating = false);
+                                  }
+                                },
+                              ),
                       ),
                     ),
 

@@ -8,7 +8,6 @@ import '../widgets/pro_avatar_widget.dart';
 import 'package:provider/provider.dart';
 import '../providers/theme_provider.dart';
 import '../providers/locale_provider.dart';
-import 'admin_requests_screen.dart';
 import 'client_profile_screen.dart';
 import 'catalog_search_screen.dart';
 import 'service_detail_screen.dart';
@@ -35,6 +34,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   int _currentBottomNavIndex = 0;
   String? _clientPhotoBase64;
+  final Set<String> _favIds = {};
 
   StreamSubscription<List<Map<String, dynamic>>>? _categoriesSub;
 
@@ -58,6 +58,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _currentBottomNavIndex = widget.initialTab;
     _loadProfilePhoto();
     _listenToCategories();
+    _loadFavorites();
   }
 
   void _listenToCategories() {
@@ -105,6 +106,22 @@ class _HomeScreenState extends State<HomeScreen> {
           });
         }
       }
+    } catch (_) {}
+  }
+
+  Future<void> _loadFavorites() async {
+    try {
+      FirebaseService().streamFavorites().listen((list) {
+        if (mounted) {
+          setState(() {
+            _favIds.clear();
+            for (final p in list) {
+              final id = (p['id'] ?? p['uid'] ?? '').toString();
+              if (id.isNotEmpty) _favIds.add(id);
+            }
+          });
+        }
+      });
     } catch (_) {}
   }
   String _selectedLocation = 'Tunis, El Menzah';
@@ -384,13 +401,60 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     Row(
                       children: [
-                        // Notification Bell circle with dot
+                        // Notification Bell - opens a notifications panel (not admin)
                         GestureDetector(
                           onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => const AdminRequestsScreen(),
+                            showModalBottomSheet(
+                              context: context,
+                              backgroundColor: Theme.of(context).brightness == Brightness.dark
+                                  ? const Color(0xFF1E293B)
+                                  : Colors.white,
+                              shape: const RoundedRectangleBorder(
+                                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                              ),
+                              builder: (_) => Padding(
+                                padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Center(
+                                      child: Container(
+                                        width: 40, height: 4,
+                                        margin: const EdgeInsets.only(bottom: 16),
+                                        decoration: BoxDecoration(
+                                          color: Colors.grey.shade300,
+                                          borderRadius: BorderRadius.circular(2),
+                                        ),
+                                      ),
+                                    ),
+                                    Text(
+                                      'Notifications',
+                                      style: TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                        color: Theme.of(context).brightness == Brightness.dark
+                                            ? Colors.white
+                                            : const Color(0xFF0F172A),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 24),
+                                    Center(
+                                      child: Column(
+                                        children: [
+                                          Icon(Icons.notifications_none_rounded,
+                                              size: 52, color: Colors.grey.shade400),
+                                          const SizedBox(height: 12),
+                                          Text(
+                                            'Aucune nouvelle notification',
+                                            style: TextStyle(color: Colors.grey.shade500, fontSize: 14),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(height: 16),
+                                  ],
+                                ),
                               ),
                             );
                           },
@@ -447,11 +511,20 @@ class _HomeScreenState extends State<HomeScreen> {
                                       image: MemoryImage(base64Decode(_clientPhotoBase64!)),
                                       fit: BoxFit.cover,
                                     )
-                                  : const DecorationImage(
-                                      image: AssetImage('assets/images/slide_1_photo.png'),
-                                      fit: BoxFit.cover,
-                                    ),
+                                  : null,
                             ),
+                            child: _clientPhotoBase64 == null || _clientPhotoBase64!.isEmpty
+                                ? Text(
+                                    widget.userName.isNotEmpty
+                                        ? widget.userName[0].toUpperCase()
+                                        : 'C',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 18,
+                                    ),
+                                  )
+                                : null,
                           ),
                         ),
                       ],
@@ -1040,9 +1113,16 @@ class _HomeScreenState extends State<HomeScreen> {
                                   left: 8,
                                   child: GestureDetector(
                                     onTap: () async {
+                                      final proId = (pro['id'] ?? pro['uid'] ?? '').toString();
                                       final isNowFav = await FirebaseService().toggleFavorite(pro);
                                       if (mounted) {
-                                        setState(() {});
+                                        setState(() {
+                                          if (isNowFav) {
+                                            _favIds.add(proId);
+                                          } else {
+                                            _favIds.remove(proId);
+                                          }
+                                        });
                                         ScaffoldMessenger.of(context).showSnackBar(
                                           SnackBar(
                                             content: Text(isNowFav
@@ -1060,9 +1140,13 @@ class _HomeScreenState extends State<HomeScreen> {
                                         color: Colors.black.withValues(alpha: 0.4),
                                         shape: BoxShape.circle,
                                       ),
-                                      child: const Icon(
-                                        Icons.favorite_rounded,
-                                        color: Color(0xFFEF4444),
+                                      child: Icon(
+                                        _favIds.contains((pro['id'] ?? pro['uid'] ?? '').toString())
+                                            ? Icons.favorite_rounded
+                                            : Icons.favorite_border_rounded,
+                                        color: _favIds.contains((pro['id'] ?? pro['uid'] ?? '').toString())
+                                            ? const Color(0xFFEF4444)
+                                            : Colors.white,
                                         size: 16,
                                       ),
                                     ),

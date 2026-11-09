@@ -1,9 +1,9 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:provider/provider.dart';
 import '../providers/theme_provider.dart';
 import '../providers/locale_provider.dart';
+import '../widgets/pro_avatar_widget.dart';
 import '../theme/app_theme.dart';
 import 'login_screen.dart';
 import '../services/firebase_service.dart';
@@ -189,33 +189,12 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
               Stack(
                 clipBehavior: Clip.none,
                 children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(16),
-                    child: _proPhotoBase64 != null && _proPhotoBase64!.isNotEmpty
-                        ? Image.memory(
-                            base64Decode(_proPhotoBase64!),
-                            width: 50,
-                            height: 50,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, _, _) => Container(
-                              width: 50,
-                              height: 50,
-                              color: const Color(0xFF163E3A),
-                              child: const Icon(Icons.person, color: Colors.white),
-                            ),
-                          )
-                        : Image.asset(
-                            'assets/images/slide_1_photo.png',
-                            width: 50,
-                            height: 50,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, _, _) => Container(
-                              width: 50,
-                              height: 50,
-                              color: const Color(0xFF163E3A),
-                              child: const Icon(Icons.person, color: Colors.white),
-                            ),
-                          ),
+                  ProAvatarWidget(
+                    name: widget.proName,
+                    photoBase64: _proPhotoBase64 ?? '',
+                    size: 50,
+                    borderRadius: 16,
+                    showVerifiedBadge: false,
                   ),
                   Positioned(
                     right: -3,

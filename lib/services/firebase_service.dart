@@ -1968,7 +1968,6 @@ class FirebaseService {
             'location': data['location'] ?? 'Grand Tunis',
             'distance': data['distance'] ?? '2.0 km',
             'available': data['available'] ?? true,
-            'avatarAsset': 'assets/images/slide_1_photo.png',
             'phone': data['phone'] ?? '+216 -- --- ---',
             'email': data['email'] ?? '',
             'bio': data['bio'] ?? 'Professionnel vérifié et certifié par DAR PLUS.',

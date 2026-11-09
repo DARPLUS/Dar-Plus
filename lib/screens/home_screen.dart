@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../services/firebase_service.dart';
 import '../theme/app_theme.dart';
 import '../core/localization/app_localizations.dart';
+import '../widgets/pro_avatar_widget.dart';
 import 'package:provider/provider.dart';
 import '../providers/theme_provider.dart';
 import '../providers/locale_provider.dart';
@@ -1007,16 +1008,12 @@ class _HomeScreenState extends State<HomeScreen> {
                               children: [
                                 ClipRRect(
                                   borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-                                  child: Image.asset(
-                                    pro['avatarAsset'] ?? 'assets/images/slide_1_photo.png',
-                                    height: 105,
-                                    width: double.infinity,
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (_, _, _) => Container(
-                                      height: 105,
-                                      color: const Color(0xFFE2DDD5),
-                                      child: const Icon(Icons.person_rounded, size: 40, color: Colors.grey),
-                                    ),
+                                  child: ProAvatarWidget(
+                                    name: pro['name'] as String? ?? '',
+                                    photoBase64: pro['photoBase64'] as String? ?? '',
+                                    size: 105,
+                                    borderRadius: 0,
+                                    showVerifiedBadge: false,
                                   ),
                                 ),
                                 Positioned(
@@ -1188,7 +1185,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     final priceVal = pro['price'] != null ? pro['price'].toString() : 'Sur devis';
                     final isAvail = pro['isAvailable'] == true || pro['available'] == true;
                     final reviewsCount = pro['reviewsCount'] ?? pro['reviews'] ?? '24';
-                    final avatar = pro['avatarAsset'] as String? ?? 'assets/images/slide_2_photo.png';
 
                     return Container(
                       margin: const EdgeInsets.only(bottom: 12),
@@ -1211,41 +1207,12 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: Row(
                           children: [
                             // Avatar with teal verified badge
-                            Stack(
-                              clipBehavior: Clip.none,
-                              children: [
-                                ClipRRect(
-                                  borderRadius: BorderRadius.circular(16),
-                                  child: Image.asset(
-                                    avatar,
-                                    width: 58,
-                                    height: 58,
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (context, error, stackTrace) => Container(
-                                      width: 58,
-                                      height: 58,
-                                      color: const Color(0xFFE2DDD5),
-                                      child: const Icon(Icons.person_rounded),
-                                    ),
-                                  ),
-                                ),
-                                Positioned(
-                                  right: -3,
-                                  bottom: -3,
-                                  child: Container(
-                                    padding: const EdgeInsets.all(3),
-                                    decoration: const BoxDecoration(
-                                      color: Color(0xFF0D544E),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: const Icon(
-                                      Icons.check_rounded,
-                                      color: Colors.white,
-                                      size: 10,
-                                    ),
-                                  ),
-                                ),
-                              ],
+                            ProAvatarWidget(
+                              name: pro['name'] as String? ?? '',
+                              photoBase64: pro['photoBase64'] as String? ?? '',
+                              size: 58,
+                              borderRadius: 16,
+                              showVerifiedBadge: true,
                             ),
                             const SizedBox(width: 14),
                             // Details
@@ -1470,20 +1437,12 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                         child: Row(
                           children: [
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(14),
-                              child: Image.asset(
-                                pro['avatarAsset'] ?? 'assets/images/slide_1_photo.png',
-                                width: 62,
-                                height: 62,
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, _, _) => Container(
-                                  width: 62,
-                                  height: 62,
-                                  color: const Color(0xFFE2DDD5),
-                                  child: const Icon(Icons.person_rounded, color: Colors.grey),
-                                ),
-                              ),
+                            ProAvatarWidget(
+                              name: pro['name'] as String? ?? '',
+                              photoBase64: pro['photoBase64'] as String? ?? '',
+                              size: 62,
+                              borderRadius: 14,
+                              showVerifiedBadge: true,
                             ),
                             const SizedBox(width: 14),
                             Expanded(

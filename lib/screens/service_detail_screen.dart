@@ -565,25 +565,35 @@ class _ServiceDetailScreenState extends State<ServiceDetailScreen> {
       BuildContext context, String proName, String serviceType, String price) {
     final addressCtrl = TextEditingController();
     final descCtrl = TextEditingController();
-    // 0 = Dès que possible, 1 = Demain matin, 2 = Choisir une date
-    int selectedSlot = 0;
-    String customDate = '';
-    String customTime = '';
-    String? addressError;
+    // Date/heure : sélection par jour glissant + créneaux
+    DateTime selectedDay = DateTime.now().add(const Duration(days: 1));
+    String selectedTime = '';
+
+    // 14 jours dès aujourd'hui
+    final List<DateTime> days = List.generate(
+        14, (i) => DateTime.now().add(Duration(days: i)));
+
+    // Créneaux horaires disponibles
+    const List<String> timeSlots = [
+      '08:00', '09:00', '10:00', '11:00',
+      '14:00', '15:00', '16:00', '17:00',
+    ];
     bool isLocating = false;
     bool isSubmitting = false;
+    String? addressError;
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final loc = AppLocalizations.of(context);
 
+    final List<String> shortDays = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
+
     String buildScheduledDate() {
-      if (selectedSlot == 0) return loc.translate('slot_asap');
-      if (selectedSlot == 1) return loc.translate('slot_tomorrow_morning');
-      if (customDate.isNotEmpty && customTime.isNotEmpty) {
-        return '$customDate · $customTime';
-      }
-      if (customDate.isNotEmpty) return customDate;
-      return loc.translate('slot_choose_date');
+      final months = ['jan', 'fév', 'mar', 'avr', 'mai', 'jun',
+                      'jul', 'aoû', 'sep', 'oct', 'nov', 'déc'];
+      final label =
+          '${shortDays[selectedDay.weekday - 1]} ${selectedDay.day} ${months[selectedDay.month - 1]}';
+      if (selectedTime.isNotEmpty) return '$label · $selectedTime';
+      return label;
     }
 
     showModalBottomSheet(
@@ -647,117 +657,150 @@ class _ServiceDetailScreenState extends State<ServiceDetailScreen> {
 
                     const SizedBox(height: 20),
 
-                    // ── Créneaux rapides ─────────────────────────────
-                    Text(
-                      loc.translate('booking_date'),
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: isDark ? Colors.white : AppTheme.titleColor,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
+                    // ── Choisir le jour ──────────────────────────────
                     Row(
                       children: [
-                        _SlotChip(
-                          label: loc.translate('slot_asap'),
-                          icon: Icons.flash_on_rounded,
-                          isSelected: selectedSlot == 0,
-                          onTap: () =>
-                              setModalState(() => selectedSlot = 0),
-                        ),
-                        const SizedBox(width: 8),
-                        _SlotChip(
-                          label: loc.translate('slot_tomorrow_morning'),
-                          icon: Icons.wb_sunny_rounded,
-                          isSelected: selectedSlot == 1,
-                          onTap: () =>
-                              setModalState(() => selectedSlot = 1),
-                        ),
-                        const SizedBox(width: 8),
-                        _SlotChip(
-                          label: loc.translate('slot_choose_date'),
-                          icon: Icons.calendar_month_rounded,
-                          isSelected: selectedSlot == 2,
-                          onTap: () async {
-                            setModalState(() => selectedSlot = 2);
-                            final picked = await showDatePicker(
-                              context: modalContext,
-                              initialDate:
-                                  DateTime.now().add(const Duration(days: 1)),
-                              firstDate: DateTime.now(),
-                              lastDate: DateTime.now()
-                                  .add(const Duration(days: 90)),
-                              builder: (ctx, child) => Theme(
-                                data: Theme.of(ctx).copyWith(
-                                  colorScheme: const ColorScheme.light(
-                                    primary: Color(0xFF0D544E),
-                                  ),
-                                ),
-                                child: child!,
-                              ),
-                            );
-                            if (picked != null && modalContext.mounted) {
-                              final days = [
-                                'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'
-                              ];
-                              final months = [
-                                'jan', 'fév', 'mar', 'avr', 'mai', 'jun',
-                                'jul', 'aoû', 'sep', 'oct', 'nov', 'déc'
-                              ];
-                              final d = '${days[picked.weekday - 1]} ${picked.day} ${months[picked.month - 1]}';
-                              final time = await showTimePicker(
-                                context: modalContext,
-                                initialTime: const TimeOfDay(hour: 9, minute: 0),
-                                builder: (ctx, child) => Theme(
-                                  data: Theme.of(ctx).copyWith(
-                                    colorScheme: const ColorScheme.light(
-                                      primary: Color(0xFF0D544E),
-                                    ),
-                                  ),
-                                  child: child!,
-                                ),
-                              );
-                              setModalState(() {
-                                customDate = d;
-                                customTime = time != null
-                                    ? '${time.hour.toString().padLeft(2, '0')}h${time.minute.toString().padLeft(2, '0')}'
-                                    : '';
-                              });
-                            }
-                          },
+                        const Text('📅', style: TextStyle(fontSize: 16)),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Choisir le jour',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                            color: isDark ? Colors.white : AppTheme.titleColor,
+                          ),
                         ),
                       ],
                     ),
-
-                    // Affichage date sélectionnée
-                    if (selectedSlot == 2 && customDate.isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF0D544E).withValues(alpha: 0.08),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.event_available_rounded,
-                                size: 16, color: Color(0xFF0D544E)),
-                            const SizedBox(width: 6),
-                            Text(
-                              '$customDate${customTime.isNotEmpty ? " · $customTime" : ""}',
-                              style: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF0D544E),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      height: 76,
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: days.length,
+                        separatorBuilder: (_, _) => const SizedBox(width: 8),
+                        itemBuilder: (_, i) {
+                          final day = days[i];
+                          final isSelected = day.year == selectedDay.year &&
+                              day.month == selectedDay.month &&
+                              day.day == selectedDay.day;
+                          final dayNames = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
+                          final dayName = dayNames[day.weekday - 1];
+                          return GestureDetector(
+                            onTap: () => setModalState(() => selectedDay = day),
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 180),
+                              width: 56,
+                              decoration: BoxDecoration(
+                                color: isSelected
+                                    ? const Color(0xFF0D544E)
+                                    : (isDark ? const Color(0xFF1E293B) : Colors.white),
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(
+                                  color: isSelected
+                                      ? const Color(0xFF0D544E)
+                                      : (isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
+                                ),
+                                boxShadow: isSelected ? [] : [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.03),
+                                    blurRadius: 4,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    dayName,
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w500,
+                                      color: isSelected
+                                          ? Colors.white.withValues(alpha: 0.85)
+                                          : (isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B)),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    '${day.day}',
+                                    style: TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                      color: isSelected
+                                          ? Colors.white
+                                          : (isDark ? Colors.white : AppTheme.titleColor),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-                          ],
-                        ),
+                          );
+                        },
                       ),
-                    ],
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    // ── Choisir l'heure ──────────────────────────────
+                    Row(
+                      children: [
+                        const Text('🕐', style: TextStyle(fontSize: 16)),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Choisir l\'heure',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                            color: isDark ? Colors.white : AppTheme.titleColor,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    GridView.count(
+                      crossAxisCount: 4,
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      crossAxisSpacing: 8,
+                      mainAxisSpacing: 8,
+                      childAspectRatio: 2.2,
+                      children: timeSlots.map((slot) {
+                        final isSelected = selectedTime == slot;
+                        return GestureDetector(
+                          onTap: () =>
+                              setModalState(() => selectedTime = slot),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 180),
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? const Color(0xFF0D544E)
+                                  : (isDark ? const Color(0xFF1E293B) : Colors.white),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: isSelected
+                                    ? const Color(0xFF0D544E)
+                                    : (isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
+                              ),
+                            ),
+                            child: Text(
+                              slot,
+                              style: TextStyle(
+                                fontSize: 13.5,
+                                fontWeight: isSelected
+                                    ? FontWeight.bold
+                                    : FontWeight.w500,
+                                color: isSelected
+                                    ? Colors.white
+                                    : (isDark ? Colors.white : AppTheme.titleColor),
+                              ),
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
 
                     const SizedBox(height: 16),
 
@@ -886,6 +929,15 @@ class _ServiceDetailScreenState extends State<ServiceDetailScreen> {
                                 if (address.length < 10) {
                                   setModalState(() => addressError =
                                       loc.translate('address_too_short'));
+                                  return;
+                                }
+                                if (selectedTime.isEmpty) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Veuillez choisir un créneau horaire.'),
+                                      backgroundColor: Color(0xFFD97706),
+                                    ),
+                                  );
                                   return;
                                 }
 
@@ -1043,74 +1095,6 @@ class _ServiceDetailScreenState extends State<ServiceDetailScreen> {
 }
 
 // ── Widgets helpers pour le booking sheet ────────────────────────────────────
-
-class _SlotChip extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final bool isSelected;
-  final VoidCallback onTap;
-
-  const _SlotChip({
-    required this.label,
-    required this.icon,
-    required this.isSelected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
-          decoration: BoxDecoration(
-            color: isSelected
-                ? const Color(0xFF0D544E)
-                : (isDark ? const Color(0xFF1E293B) : Colors.white),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: isSelected
-                  ? const Color(0xFF0D544E)
-                  : (isDark
-                      ? const Color(0xFF334155)
-                      : const Color(0xFFDDE3EA)),
-            ),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                icon,
-                size: 18,
-                color: isSelected
-                    ? Colors.white
-                    : const Color(0xFF0D544E),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                label,
-                textAlign: TextAlign.center,
-                maxLines: 2,
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                  color: isSelected
-                      ? Colors.white
-                      : (isDark
-                          ? const Color(0xFF94A3B8)
-                          : AppTheme.titleColor),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
 
 class _RecapRow extends StatelessWidget {
   final IconData icon;

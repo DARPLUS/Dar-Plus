@@ -1951,8 +1951,8 @@ class FirebaseService {
     if (_isFirebaseInitialized) {
       return FirebaseFirestore.instance
           .collection('users')
-          .where('role', isEqualTo: 'pro')
-          .where('isActive', isEqualTo: true)
+          .where('role', isEqualTo: 'professionnel')
+          .where('isApproved', isEqualTo: true)
           .snapshots()
           .map((snapshot) {
         List<Map<String, dynamic>> list = snapshot.docs.map((doc) {
@@ -1974,6 +1974,7 @@ class FirebaseService {
             'bio': data['bio'] ?? 'Professionnel vérifié et certifié par DAR PLUS.',
             'specialties': data['specialties'] ?? [data['serviceType'] ?? 'Artisan'],
             'badges': ['Vérifié DAR+'],
+            'photoBase64': data['photoBase64'] ?? '',
           };
         }).toList();
 
@@ -2151,6 +2152,42 @@ class FirebaseService {
     return Stream.value(list);
   }
 
+  /// Écoute en temps réel des avis d'un professionnel
+  Stream<List<Map<String, dynamic>>> streamReviews(String proId) {
+    if (_isFirebaseInitialized) {
+      return FirebaseFirestore.instance
+          .collection('reviews')
+          .where('proId', isEqualTo: proId)
+          .orderBy('createdAt', descending: true)
+          .limit(10)
+          .snapshots()
+          .map((snap) => snap.docs.map((d) {
+                final data = d.data();
+                data['id'] = d.id;
+                final ts = data['createdAt'];
+                if (ts is Timestamp) {
+                  final dt = ts.toDate();
+                  final diff = DateTime.now().difference(dt);
+                  if (diff.inDays == 0) {
+                    data['dateLabel'] = "Aujourd'hui";
+                  } else if (diff.inDays == 1) {
+                    data['dateLabel'] = 'Hier';
+                  } else if (diff.inDays < 7) {
+                    data['dateLabel'] = 'Il y a ${diff.inDays} jours';
+                  } else if (diff.inDays < 30) {
+                    data['dateLabel'] = 'Il y a ${diff.inDays ~/ 7} semaine(s)';
+                  } else {
+                    data['dateLabel'] = 'Il y a ${diff.inDays ~/ 30} mois';
+                  }
+                } else {
+                  data['dateLabel'] = '';
+                }
+                return data;
+              }).toList());
+    }
+    return Stream.value([]);
+  }
+
   /// Annuler une réservation
   Future<bool> cancelBooking(String bookingId) async {
     try {
@@ -2185,7 +2222,7 @@ class FirebaseService {
       if (!_isFirebaseInitialized) return;
       final snap = await FirebaseFirestore.instance
           .collection('users')
-          .where('role', isEqualTo: 'pro')
+          .where('role', isEqualTo: 'professionnel')
           .limit(1)
           .get();
 
@@ -2198,7 +2235,7 @@ class FirebaseService {
             'fullName': pro['name'],
             'email': pro['email'],
             'phone': pro['phone'],
-            'role': 'pro',
+            'role': 'professionnel',
             'serviceType': pro['serviceType'],
             'rating': pro['rating'],
             'reviewsCount': pro['reviewsCount'],

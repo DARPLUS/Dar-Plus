@@ -7,6 +7,7 @@ import '../widgets/pro_avatar_widget.dart';
 import '../theme/app_theme.dart';
 import 'login_screen.dart';
 import '../services/firebase_service.dart';
+import 'pro_requests_screen.dart';
 
 class ProHomeScreen extends StatefulWidget {
   final String proName;
@@ -117,7 +118,9 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
 
     return Scaffold(
       backgroundColor: bgCream,
-      body: SafeArea(
+      body: _currentBottomNavIndex == 1
+          ? const ProRequestsScreen()
+          : SafeArea(
         top: false,
         child: SingleChildScrollView(
           physics: const BouncingScrollPhysics(),
@@ -1056,7 +1059,31 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
             label: 'pro_tab_dashboard'.tr(),
           ),
           BottomNavigationBarItem(
-            icon: const Icon(Icons.calendar_today_rounded),
+            icon: StreamBuilder<List<Map<String, dynamic>>>(
+              stream: FirebaseService().streamProBookings(statusFilter: 'en_attente'),
+              builder: (_, snap) {
+                final count = snap.data?.length ?? 0;
+                return Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    const Icon(Icons.calendar_today_rounded),
+                    if (count > 0)
+                      Positioned(
+                        top: -4, right: -6,
+                        child: Container(
+                          padding: const EdgeInsets.all(3),
+                          decoration: const BoxDecoration(
+                            color: Color(0xFFE05D38),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Text('$count',
+                              style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
+                        ),
+                      ),
+                  ],
+                );
+              },
+            ),
             label: 'pro_tab_requests'.tr(),
           ),
           BottomNavigationBarItem(

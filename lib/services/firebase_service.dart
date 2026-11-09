@@ -2093,6 +2093,23 @@ class FirebaseService {
           details: 'Réservation $serviceType créée pour $proName par $clientName (ID: ${docRef.id})',
         );
 
+        // Notification in-app pour le pro
+        try {
+          await FirebaseFirestore.instance
+              .collection('notifications')
+              .add({
+            'recipientId': proId,
+            'type': 'new_booking',
+            'title': '🔔 Nouvelle demande de service',
+            'body': '$clientName demande "$serviceType" — $serviceType',
+            'bookingId': docRef.id,
+            'clientName': clientName,
+            'serviceType': serviceType,
+            'isRead': false,
+            'createdAt': FieldValue.serverTimestamp(),
+          });
+        } catch (_) {}
+
         return {'success': true, 'id': docRef.id, 'message': 'Réservation créée avec succès !'};
       } else {
         final mockId = 'booking_${DateTime.now().millisecondsSinceEpoch}';
@@ -2149,6 +2166,90 @@ class FirebaseService {
       list = list.where((b) => _normalizeStatus(b['status'] as String? ?? '') == filterNorm).toList();
     }
     return Stream.value(list);
+  }
+
+  /// Écoute en temps réel des réservations reçues par un professionnel
+  Stream<List<Map<String, dynamic>>> streamProBookings({String? statusFilter}) {
+    final user = FirebaseAuth.instance.currentUser;
+    final proId = user?.uid;
+
+    String fmtDate(dynamic ts) {
+      if (ts is Timestamp) {
+        final dt = ts.toDate();
+        final now = DateTime.now();
+        if (dt.year == now.year && dt.month == now.month && dt.day == now.day) {
+          return 'Auj. ${dt.hour.toString().padLeft(2,'0')}:${dt.minute.toString().padLeft(2,'0')}';
+        }
+        final diff = dt.difference(now);
+        if (diff.inDays == 1) return 'Demain ${dt.hour.toString().padLeft(2,'0')}:${dt.minute.toString().padLeft(2,'0')}';
+        return '${dt.day.toString().padLeft(2,'0')}/${dt.month.toString().padLeft(2,'0')} ${dt.hour.toString().padLeft(2,'0')}:${dt.minute.toString().padLeft(2,'0')}';
+      }
+      return '';
+    }
+
+    if (_isFirebaseInitialized && proId != null) {
+      Query query = FirebaseFirestore.instance
+          .collection('bookings')
+          .where('proId', isEqualTo: proId);
+
+      return query.snapshots().map((snapshot) {
+        var list = snapshot.docs.map((d) {
+          final data = d.data() as Map<String, dynamic>;
+          data['id'] = d.id;
+          data['dateLabel'] = fmtDate(data['scheduledDate'] ?? data['createdAt']);
+          return data;
+        }).toList();
+
+        list.sort((a, b) {
+          final aDate = a['createdAt'];
+          final bDate = b['createdAt'];
+          if (aDate is Timestamp && bDate is Timestamp) return bDate.compareTo(aDate);
+          return 0;
+        });
+
+        if (statusFilter != null && statusFilter.isNotEmpty) {
+          final f = _normalizeStatus(statusFilter);
+          list = list.where((b) => _normalizeStatus(b['status'] as String? ?? '') == f).toList();
+        }
+        return list;
+      });
+    }
+
+    // Fallback local (bookings dont proId correspond)
+    var list = _localBookings
+        .where((b) => proId == null || b['proId'] == proId)
+        .map((b) {
+          final copy = Map<String, dynamic>.from(b);
+          copy['dateLabel'] = copy['scheduledDate'] ?? '';
+          return copy;
+        })
+        .toList();
+    if (statusFilter != null && statusFilter.isNotEmpty) {
+      final f = _normalizeStatus(statusFilter);
+      list = list.where((b) => _normalizeStatus(b['status'] as String? ?? '') == f).toList();
+    }
+    return Stream.value(list);
+  }
+
+  /// Met à jour le statut d'une réservation (pro accepte / refuse)
+  Future<bool> updateBookingStatus(String bookingId, String newStatus) async {
+    try {
+      if (_isFirebaseInitialized) {
+        await FirebaseFirestore.instance
+            .collection('bookings')
+            .doc(bookingId)
+            .update({
+          'status': newStatus,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      }
+      final idx = _localBookings.indexWhere((b) => b['id'] == bookingId);
+      if (idx != -1) _localBookings[idx]['status'] = newStatus;
+      return true;
+    } catch (e) {
+      debugPrint('Erreur updateBookingStatus: $e');
+      return false;
+    }
   }
 
   /// Écoute en temps réel des avis d'un professionnel

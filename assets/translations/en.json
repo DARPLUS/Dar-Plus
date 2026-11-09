@@ -395,5 +395,21 @@
   "booking_cancel_warning": "Are you sure you want to cancel this booking? This action is irreversible.",
   "map_title": "Map of Professionals",
   "map_pros_found": "pros found",
-  "map_you": "You"
+  "map_you": "You",
+  "pro_req_title": "Service Requests",
+  "pro_req_new_subtitle": "new requests",
+  "pro_req_tab_all": "All",
+  "pro_req_tab_new": "New",
+  "pro_req_tab_inprog": "In Progress",
+  "pro_req_tab_done": "Completed",
+  "pro_req_status_new": "New",
+  "pro_req_status_confirmed": "Confirmed",
+  "pro_req_status_done": "Completed",
+  "pro_req_refuse": "Decline",
+  "pro_req_accept": "Accept",
+  "pro_req_mark_done": "Mark as completed",
+  "pro_req_accepted_snack": "Request accepted!",
+  "pro_req_refused_snack": "Request declined.",
+  "pro_req_done_snack": "Service marked as completed.",
+  "pro_req_empty": "No requests at the moment."
 }

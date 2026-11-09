@@ -395,5 +395,21 @@
   "booking_cancel_warning": "هل تريد حقاً إلغاء هذا الحجز؟ هذا الإجراء لا يمكن التراجع عنه.",
   "map_title": "خريطة الحرفيين",
   "map_pros_found": "حرفي تم العثور عليهم",
-  "map_you": "أنت"
+  "map_you": "أنت",
+  "pro_req_title": "طلبات الخدمة",
+  "pro_req_new_subtitle": "طلبات جديدة",
+  "pro_req_tab_all": "الكل",
+  "pro_req_tab_new": "جديدة",
+  "pro_req_tab_inprog": "قيد التنفيذ",
+  "pro_req_tab_done": "مكتملة",
+  "pro_req_status_new": "جديد",
+  "pro_req_status_confirmed": "مؤكدة",
+  "pro_req_status_done": "مكتملة",
+  "pro_req_refuse": "رفض",
+  "pro_req_accept": "قبول",
+  "pro_req_mark_done": "تحديد كمكتمل",
+  "pro_req_accepted_snack": "تم قبول الطلب!",
+  "pro_req_refused_snack": "تم رفض الطلب.",
+  "pro_req_done_snack": "تم تحديد الخدمة كمكتملة.",
+  "pro_req_empty": "لا توجد طلبات حالياً."
 }

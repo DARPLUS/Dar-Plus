@@ -490,7 +490,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                           title: Text('Confirmer la suppression'),
                           content: Text('Voulez-vous vraiment supprimer "${cat['name']}" ?'),
                           actions: [
-                            TextButton(onPressed: () => Navigator.pop(cctx, false), child: Text('Annuler')),
+                            TextButton(onPressed: () => Navigator.pop(cctx, false), child: Text('cancel'.tr())),
                             TextButton(
                               onPressed: () => Navigator.pop(cctx, true),
                               child: Text('Supprimer', style: TextStyle(color: Colors.red)),
@@ -763,7 +763,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
           actions: [
             TextButton(
               onPressed: isSaving ? null : () => Navigator.pop(ctx),
-              child: Text('Annuler', style: TextStyle(color: Color(0xFF64748B))),
+              child: Text('cancel'.tr(), style: const TextStyle(color: Color(0xFF64748B))),
             ),
             ElevatedButton(
               onPressed: isSaving
@@ -821,18 +821,20 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setDialogState) {
+          final dlgDark = Theme.of(context).brightness == Brightness.dark;
           return AlertDialog(
+            backgroundColor: dlgDark ? const Color(0xFF1E293B) : Colors.white,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
             title: Row(
               children: [
-                Icon(Icons.manage_accounts_rounded, color: Color(0xFF0D544E), size: 26),
-                SizedBox(width: 10),
+                const Icon(Icons.manage_accounts_rounded, color: Color(0xFF0D544E), size: 26),
+                const SizedBox(width: 10),
                 Text(
                   'admin_edit_my_profile'.tr(),
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
-                    color: AppTheme.titleColor,
+                    color: dlgDark ? Colors.white : AppTheme.titleColor,
                   ),
                 ),
               ],
@@ -844,14 +846,14 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      'Modifiez vos informations administratives.',
+                      'admin_edit_info_desc'.tr(),
                       style: TextStyle(fontSize: 12.5, color: Color(0xFF64748B)),
                     ),
                     const SizedBox(height: 16),
                     TextFormField(
                       controller: nameCtrl,
                       decoration: InputDecoration(
-                        labelText: 'Nom complet',
+                        labelText: 'admin_full_name'.tr(),
                         prefixIcon: const Icon(Icons.person_rounded, size: 20),
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
                       ),
@@ -862,22 +864,22 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                       controller: emailCtrl,
                       keyboardType: TextInputType.emailAddress,
                       decoration: InputDecoration(
-                        labelText: 'Adresse e-mail',
+                        labelText: 'admin_email_address'.tr(),
                         prefixIcon: const Icon(Icons.alternate_email_rounded, size: 20),
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
                       ),
-                      validator: (v) => v == null || !v.contains('@') ? 'Email invalide' : null,
+                      validator: (v) => v == null || !v.contains('@') ? 'admin_invalid_email'.tr() : null,
                     ),
                     const SizedBox(height: 12),
                     TextFormField(
                       controller: phoneCtrl,
                       keyboardType: TextInputType.phone,
                       decoration: InputDecoration(
-                        labelText: 'Numéro de téléphone',
+                        labelText: 'admin_phone_number'.tr(),
                         prefixIcon: const Icon(Icons.phone_iphone_rounded, size: 20),
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
                       ),
-                      validator: (v) => v == null || v.trim().isEmpty ? 'Téléphone requis' : null,
+                      validator: (v) => v == null || v.trim().isEmpty ? 'admin_phone_required'.tr() : null,
                     ),
                   ],
                 ),
@@ -886,7 +888,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx),
-                child: Text('Annuler', style: TextStyle(color: Color(0xFF64748B))),
+                child: Text('cancel'.tr(), style: const TextStyle(color: Color(0xFF64748B))),
               ),
               ElevatedButton(
                 onPressed: isSaving
@@ -954,7 +956,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(c),
-            child: Text('Annuler', style: TextStyle(color: Color(0xFF64748B))),
+            child: Text('cancel'.tr(), style: const TextStyle(color: Color(0xFF64748B))),
           ),
           ElevatedButton(
             onPressed: () async {
@@ -1098,7 +1100,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
     if (!isSuperAdmin) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Seul le Super Admin peut creer de nouveaux administrateurs.'),
+          content: Text('admin_only_super_admin_categories'.tr()),
           backgroundColor: Colors.redAccent,
         ),
       );
@@ -1114,24 +1116,26 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
       builder: (ctx) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
+            final dlgIsDark = Theme.of(context).brightness == Brightness.dark;
             return AlertDialog(
+              backgroundColor: dlgIsDark ? const Color(0xFF1E293B) : Colors.white,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(24),
               ),
               title: Row(
                 children: [
-                  Icon(
+                  const Icon(
                     Icons.admin_panel_settings_rounded,
                     color: Color(0xFF7C3AED),
                     size: 26,
                   ),
-                  SizedBox(width: 10),
+                  const SizedBox(width: 10),
                   Text(
                     'admin_create_account_title'.tr(),
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
-                      color: AppTheme.titleColor,
+                      color: dlgIsDark ? Colors.white : AppTheme.titleColor,
                     ),
                   ),
                 ],
@@ -1143,17 +1147,18 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        'Ajoutez un nouvel administrateur. Un mot de passe sera généré automatiquement et lui sera envoyé directement par e-mail.',
+                        'admin_create_account_desc'.tr(),
                         style: TextStyle(
                           fontSize: 12.5,
-                          color: AppTheme.subtitleColor,
+                          color: dlgIsDark ? const Color(0xFF94A3B8) : AppTheme.subtitleColor,
                         ),
                       ),
                       const SizedBox(height: 16),
                       TextFormField(
                         controller: nameController,
+                        style: TextStyle(color: dlgIsDark ? Colors.white : AppTheme.titleColor),
                         decoration: InputDecoration(
-                          labelText: 'Nom complet',
+                          labelText: 'admin_full_name'.tr(),
                           prefixIcon: const Icon(Icons.person_rounded, size: 20),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(14),
@@ -1170,8 +1175,9 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                       TextFormField(
                         controller: phoneController,
                         keyboardType: TextInputType.phone,
+                        style: TextStyle(color: dlgIsDark ? Colors.white : AppTheme.titleColor),
                         decoration: InputDecoration(
-                          labelText: 'Téléphone',
+                          labelText: 'admin_phone_number'.tr(),
                           prefixIcon: const Icon(Icons.phone_rounded, size: 20),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(14),
@@ -1182,13 +1188,14 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                           ),
                         ),
                         validator: (v) => v == null || v.trim().isEmpty
-                            ? 'Téléphone requis'
+                            ? 'admin_phone_required'.tr()
                             : null,
                       ),
                       const SizedBox(height: 12),
                       TextFormField(
                         controller: emailController,
                         keyboardType: TextInputType.emailAddress,
+                        style: TextStyle(color: dlgIsDark ? Colors.white : AppTheme.titleColor),
                         decoration: InputDecoration(
                           labelText: 'admin_institutional_email'.tr(),
                           prefixIcon:
@@ -1202,27 +1209,33 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                           ),
                         ),
                         validator: (v) =>
-                            v == null || !v.contains('@') ? 'Email invalide' : null,
+                            v == null || !v.contains('@') ? 'admin_invalid_email'.tr() : null,
                       ),
                       const SizedBox(height: 14),
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFF3E8FF),
+                          color: dlgIsDark
+                              ? const Color(0xFF4C1D95).withValues(alpha: 0.3)
+                              : const Color(0xFFF3E8FF),
                           borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: const Color(0xFFDDD6FE)),
+                          border: Border.all(
+                            color: dlgIsDark
+                                ? const Color(0xFF7C3AED).withValues(alpha: 0.4)
+                                : const Color(0xFFDDD6FE),
+                          ),
                         ),
-                        child: const Row(
+                        child: Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Icon(Icons.mark_email_read_rounded, color: Color(0xFF7C3AED), size: 20),
-                            SizedBox(width: 8),
+                            const Icon(Icons.mark_email_read_rounded, color: Color(0xFF7C3AED), size: 20),
+                            const SizedBox(width: 8),
                             Expanded(
                               child: Text(
-                                'Le mot de passe sera généré de façon sécurisée et transmis automatiquement par email au nouvel administrateur.',
+                                'admin_password_auto_generated'.tr(),
                                 style: TextStyle(
                                   fontSize: 12,
-                                  color: Color(0xFF5B21B6),
+                                  color: dlgIsDark ? const Color(0xFFC4B5FD) : const Color(0xFF5B21B6),
                                   height: 1.35,
                                   fontWeight: FontWeight.w500,
                                 ),
@@ -1238,8 +1251,8 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(ctx),
-                  child: Text('Annuler',
-                      style: TextStyle(color: Color(0xFF64748B))),
+                  child: Text('cancel'.tr(),
+                      style: TextStyle(color: dlgIsDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B))),
                 ),
                 ElevatedButton(
                   onPressed: isSubmitting
@@ -1446,7 +1459,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
           actions: [
             TextButton(
               onPressed: isApproving ? null : () => Navigator.pop(ctx),
-              child: Text('Annuler', style: TextStyle(color: Color(0xFF64748B))),
+              child: Text('cancel'.tr(), style: const TextStyle(color: Color(0xFF64748B))),
             ),
             ElevatedButton(
               onPressed: isApproving

@@ -10,6 +10,8 @@ import '../services/firebase_service.dart';
 import '../providers/theme_provider.dart';
 import '../providers/locale_provider.dart';
 import 'login_screen.dart';
+import 'home_screen.dart';
+import 'payment_history_screen.dart';
 
 class ClientProfileScreen extends StatefulWidget {
   final String userName;
@@ -779,7 +781,12 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                       iconBg: const Color(0xFFFCE7F3),
                       iconColor: const Color(0xFFEC4899),
                       title: 'favorites'.tr(),
-                      onTap: () {},
+                      onTap: () {
+                        Navigator.of(context).pushAndRemoveUntil(
+                          MaterialPageRoute(builder: (_) => const HomeScreen(initialTab: 2)),
+                          (route) => false,
+                        );
+                      },
                     ),
                     _buildDivider(),
                     _buildMenuItem(
@@ -787,7 +794,23 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                       iconBg: const Color(0xFFE0E7FF),
                       iconColor: const Color(0xFF6366F1),
                       title: 'history'.tr(),
-                      onTap: () {},
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => const PaymentHistoryScreen()),
+                        );
+                      },
+                    ),
+                    _buildDivider(),
+                    _buildMenuItem(
+                      icon: Icons.receipt_long_rounded,
+                      iconBg: const Color(0xFFD1FAE5),
+                      iconColor: const Color(0xFF059669),
+                      title: 'Historique des paiements',
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => const PaymentHistoryScreen()),
+                        );
+                      },
                     ),
                     _buildDivider(),
                     _buildMenuItem(
@@ -894,15 +917,9 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
 
                   // SECTION 4: LANGUE (matches screenshot 3)
                   _buildSectionHeader('language_header'.tr()),
-                  Row(
-                    children: [
-                      _buildLangPill('FR', 'FR', 'FR'),
-                      const SizedBox(width: 10),
-                      _buildLangPill('EN', 'GB', 'EN'),
-                      const SizedBox(width: 10),
-                      _buildLangPill('AR', 'TN', 'AR'),
-                    ],
-                  ),
+                  _buildCardContainer([
+                    _buildLanguageTile(),
+                  ]),
 
                   const SizedBox(height: 24),
 
@@ -1315,61 +1332,225 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
     );
   }
 
-  Widget _buildLangPill(String key, String prefix, String label) {
+  Widget _buildLanguageTile() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final currentLang = context.locale.languageCode.toUpperCase();
-    final isSelected = currentLang == key.toUpperCase();
+    final currentCode = context.locale.languageCode;
 
-    return Expanded(
-      child: GestureDetector(
-        onTap: () async {
-          final targetLocale = Locale(key.toLowerCase());
-          await context.setLocale(targetLocale);
-          if (mounted) {
-            context.read<LocaleProvider>().setLocale(targetLocale);
-          }
-        },
-        child: Container(
-          height: 48,
-          decoration: BoxDecoration(
-            color: isSelected
-                ? const Color(0xFF0C5050)
-                : (isDark ? const Color(0xFF1E293B) : Colors.white),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: isSelected
-                  ? const Color(0xFF0C5050)
-                  : (isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
-              width: 1.2,
+    const langs = [
+      {'code': 'fr', 'flag': '🇫🇷', 'name': 'Français', 'nameKey': 'language_fr'},
+      {'code': 'en', 'flag': '🇬🇧', 'name': 'English',  'nameKey': 'language_en'},
+      {'code': 'ar', 'flag': '🇹🇳', 'name': 'العربية',  'nameKey': 'language_ar'},
+    ];
+
+    final current = langs.firstWhere(
+      (l) => l['code'] == currentCode,
+      orElse: () => langs[0],
+    );
+
+    return InkWell(
+      onTap: () => _showLanguageSheet(langs),
+      borderRadius: BorderRadius.circular(14),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(
+          children: [
+            _buildIconBadge(
+              icon: Icons.language_rounded,
+              bgColor: isDark
+                  ? const Color(0xFF0F172A)
+                  : const Color(0xFFE0F2FE),
+              iconColor: const Color(0xFF0284C7),
             ),
-          ),
-          alignment: Alignment.center,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                prefix,
+            const SizedBox(width: 14),
+            Expanded(
+              child: Text(
+                'language'.tr(),
                 style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                  color: isSelected
-                      ? Colors.white.withValues(alpha: 0.7)
-                      : const Color(0xFF94A3B8),
+                  fontSize: 14.5,
+                  fontWeight: FontWeight.w600,
+                  color: isDark ? Colors.white : const Color(0xFF0F172A),
                 ),
               ),
-              const SizedBox(width: 5),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  color: isSelected ? Colors.white : (isDark ? Colors.white : const Color(0xFF0F172A)),
-                ),
+            ),
+            // Badge langue active
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: isDark
+                    ? const Color(0xFF0D544E).withValues(alpha: 0.25)
+                    : const Color(0xFFD7F3EA),
+                borderRadius: BorderRadius.circular(20),
               ),
-            ],
-          ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    current['flag'] as String,
+                    style: const TextStyle(fontSize: 16),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    current['name'] as String,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF0D544E),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Icon(
+              Icons.chevron_right_rounded,
+              color: isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8),
+              size: 20,
+            ),
+          ],
         ),
       ),
+    );
+  }
+
+  void _showLanguageSheet(List<Map<String, String>> langs) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final currentCode = context.locale.languageCode;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Handle bar
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 20),
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? const Color(0xFF334155)
+                        : const Color(0xFFE2E8F0),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              Text(
+                'lang_select_title'.tr(),
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: isDark ? Colors.white : const Color(0xFF0F172A),
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'lang_select_subtitle'.tr(),
+                style: TextStyle(
+                  fontSize: 13,
+                  color: isDark
+                      ? const Color(0xFF94A3B8)
+                      : const Color(0xFF64748B),
+                ),
+              ),
+              const SizedBox(height: 20),
+              ...langs.map((lang) {
+                final isSelected = lang['code'] == currentCode;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: InkWell(
+                    onTap: () async {
+                      Navigator.pop(ctx);
+                      final targetLocale = Locale(lang['code']!);
+                      await context.setLocale(targetLocale);
+                      if (mounted) {
+                        context
+                            .read<LocaleProvider>()
+                            .setLocale(targetLocale, context);
+                      }
+                    },
+                    borderRadius: BorderRadius.circular(16),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 14),
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? const Color(0xFF0D544E)
+                            : (isDark
+                                ? const Color(0xFF0F172A)
+                                : const Color(0xFFF8FAFC)),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: isSelected
+                              ? const Color(0xFF0D544E)
+                              : (isDark
+                                  ? const Color(0xFF334155)
+                                  : const Color(0xFFE2E8F0)),
+                          width: 1.5,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Text(
+                            lang['flag']!,
+                            style: const TextStyle(fontSize: 24),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  lang['name']!,
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.bold,
+                                    color: isSelected
+                                        ? Colors.white
+                                        : (isDark
+                                            ? Colors.white
+                                            : const Color(0xFF0F172A)),
+                                  ),
+                                ),
+                                Text(
+                                  lang['nameKey']!.tr(),
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: isSelected
+                                        ? Colors.white.withValues(alpha: 0.75)
+                                        : (isDark
+                                            ? const Color(0xFF64748B)
+                                            : const Color(0xFF94A3B8)),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          if (isSelected)
+                            const Icon(
+                              Icons.check_circle_rounded,
+                              color: Colors.white,
+                              size: 22,
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              }),
+            ],
+          ),
+        );
+      },
     );
   }
 }

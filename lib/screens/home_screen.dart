@@ -1038,6 +1038,39 @@ class _HomeScreenState extends State<HomeScreen> {
                                     ),
                                   ),
                                 ),
+                                Positioned(
+                                  top: 8,
+                                  left: 8,
+                                  child: GestureDetector(
+                                    onTap: () async {
+                                      final isNowFav = await FirebaseService().toggleFavorite(pro);
+                                      if (mounted) {
+                                        setState(() {});
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text(isNowFav
+                                                ? '${pro['name']} ajouté aux favoris !'
+                                                : '${pro['name']} retiré des favoris.'),
+                                            backgroundColor: isNowFav ? const Color(0xFF10B981) : Colors.grey.shade700,
+                                            duration: const Duration(seconds: 1),
+                                          ),
+                                        );
+                                      }
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.all(5),
+                                      decoration: BoxDecoration(
+                                        color: Colors.black.withValues(alpha: 0.4),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Icon(
+                                        Icons.favorite_rounded,
+                                        color: Color(0xFFEF4444),
+                                        size: 16,
+                                      ),
+                                    ),
+                                  ),
+                                ),
                               ],
                             ),
                             Padding(
@@ -1308,28 +1341,225 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildFavoritesScreenPlaceholder(double topPadding) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardColor = isDark ? const Color(0xFF1E293B) : Colors.white;
+    final borderColor = isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
+    final textPrimary = isDark ? Colors.white : const Color(0xFF0F172A);
+    final textSecondary = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+
     return SafeArea(
-      child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.favorite_rounded, size: 54, color: Color(0xFFDE6D1B)),
-            const SizedBox(height: 12),
-            Text(
-              context.tr('client_favorite_pros_title'),
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: isDark ? Colors.white : AppTheme.titleColor,
+      child: StreamBuilder<List<Map<String, dynamic>>>(
+        stream: FirebaseService().streamFavorites(),
+        builder: (context, snapshot) {
+          final favs = snapshot.data ?? [];
+
+          if (snapshot.connectionState == ConnectionState.waiting && favs.isEmpty) {
+            return const Center(child: CircularProgressIndicator(color: Color(0xFF0D544E)));
+          }
+
+          if (favs.isEmpty) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 32),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(22),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEF4444).withValues(alpha: 0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.favorite_border_rounded, size: 56, color: Color(0xFFEF4444)),
+                    ),
+                    const SizedBox(height: 18),
+                    Text(
+                      'Aucun artisan favori pour le moment',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Ajoutez des artisans à vos favoris en cliquant sur l\'icône cœur pour les retrouver rapidement ici.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 13.5, color: textSecondary, height: 1.4),
+                    ),
+                    const SizedBox(height: 24),
+                    ElevatedButton.icon(
+                      onPressed: () {
+                        setState(() => _currentBottomNavIndex = 0);
+                      },
+                      icon: const Icon(Icons.search_rounded, size: 18),
+                      label: const Text('Découvrir les artisans', style: TextStyle(fontWeight: FontWeight.bold)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF0D544E),
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
+                      ),
+                    ),
+                  ],
+                ),
               ),
+            );
+          }
+
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      'Mes Favoris',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: textPrimary,
+                        letterSpacing: -0.4,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF0D544E).withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Text(
+                        '${favs.length}',
+                        style: const TextStyle(
+                          color: Color(0xFF0D544E),
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                Expanded(
+                  child: ListView.separated(
+                    itemCount: favs.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 12),
+                    itemBuilder: (context, index) {
+                      final pro = favs[index];
+                      final proName = pro['name'] ?? pro['fullName'] ?? 'Artisan';
+                      final service = pro['serviceType'] ?? 'Service';
+                      final price = pro['price'] ?? '35 DT/h';
+                      final rating = (pro['rating'] is num) ? (pro['rating'] as num).toDouble() : 4.8;
+
+                      return Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: cardColor,
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border.all(color: borderColor),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.02),
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(14),
+                              child: Image.asset(
+                                pro['avatarAsset'] ?? 'assets/images/slide_1_photo.png',
+                                width: 62,
+                                height: 62,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, _, _) => Container(
+                                  width: 62,
+                                  height: 62,
+                                  color: const Color(0xFFE2DDD5),
+                                  child: const Icon(Icons.person_rounded, color: Colors.grey),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    proName,
+                                    style: TextStyle(
+                                      fontSize: 15.5,
+                                      fontWeight: FontWeight.bold,
+                                      color: textPrimary,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 3),
+                                  Text(
+                                    service,
+                                    style: TextStyle(fontSize: 12.5, color: textSecondary),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Row(
+                                    children: [
+                                      const Icon(Icons.star_rounded, size: 16, color: Color(0xFFF59E0B)),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        rating.toStringAsFixed(1),
+                                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: textPrimary),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Text(
+                                        price,
+                                        style: const TextStyle(
+                                          fontSize: 12.5,
+                                          fontWeight: FontWeight.bold,
+                                          color: Color(0xFFDE6D1B),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Column(
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.favorite_rounded, color: Color(0xFFEF4444), size: 22),
+                                  tooltip: 'Retirer des favoris',
+                                  onPressed: () async {
+                                    await FirebaseService().toggleFavorite(pro);
+                                    if (mounted) setState(() {});
+                                  },
+                                ),
+                                ElevatedButton(
+                                  onPressed: () => _showProDetails(pro),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF0D544E),
+                                    foregroundColor: Colors.white,
+                                    elevation: 0,
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                    minimumSize: Size.zero,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                  ),
+                                  child: const Text('Réserver', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 6),
-            Text(
-              context.tr('client_favorite_pros_sub'),
-              style: TextStyle(color: isDark ? Colors.grey.shade400 : Colors.grey),
-            ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }

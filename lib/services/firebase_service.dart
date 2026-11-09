@@ -2258,4 +2258,126 @@ class FirebaseService {
       debugPrint('Note: ensemencement pros non bloquant: $e');
     }
   }
+
+  // ================= GESTION RÉELLE DES FAVORIS CLIENT =================
+
+  static final Set<String> _localFavoriteIds = {};
+  static final List<Map<String, dynamic>> _localFavoritesList = [];
+
+  /// Vérifie si un professionnel est dans les favoris
+  Future<bool> isFavorite(String proId) async {
+    try {
+      if (_isFirebaseInitialized) {
+        final user = FirebaseAuth.instance.currentUser;
+        final clientId = user?.uid;
+        if (clientId != null) {
+          final doc = await FirebaseFirestore.instance
+              .collection('users')
+              .doc(clientId)
+              .collection('favorites')
+              .doc(proId)
+              .get();
+          if (doc.exists) {
+            _localFavoriteIds.add(proId);
+            return true;
+          } else {
+            _localFavoriteIds.remove(proId);
+            return false;
+          }
+        }
+      }
+      return _localFavoriteIds.contains(proId);
+    } catch (_) {
+      return _localFavoriteIds.contains(proId);
+    }
+  }
+
+  /// Basculer l'état favori d'un artisan (Ajout / Suppression)
+  /// Retourne `true` s'il est désormais favori, `false` s'il a été retiré.
+  Future<bool> toggleFavorite(Map<String, dynamic> pro) async {
+    try {
+      final proId = (pro['id'] ?? pro['uid'] ?? 'pro_${pro['name']}').toString();
+      String clientId = 'client_anon';
+      if (_isFirebaseInitialized) {
+        final user = FirebaseAuth.instance.currentUser;
+        if (user != null) clientId = user.uid;
+      }
+
+      final bool currentlyFav = await isFavorite(proId);
+      final bool newStatus = !currentlyFav;
+
+      if (newStatus) {
+        _localFavoriteIds.add(proId);
+        _localFavoritesList.removeWhere((p) => (p['id'] ?? p['uid']) == proId);
+        _localFavoritesList.insert(0, Map<String, dynamic>.from(pro));
+      } else {
+        _localFavoriteIds.remove(proId);
+        _localFavoritesList.removeWhere((p) => (p['id'] ?? p['uid']) == proId);
+      }
+
+      if (_isFirebaseInitialized && clientId != 'client_anon') {
+        final favRef = FirebaseFirestore.instance
+            .collection('users')
+            .doc(clientId)
+            .collection('favorites')
+            .doc(proId);
+
+        if (newStatus) {
+          await favRef.set({
+            ...pro,
+            'id': proId,
+            'favoritedAt': FieldValue.serverTimestamp(),
+          });
+        } else {
+          await favRef.delete();
+        }
+      }
+
+      return newStatus;
+    } catch (e) {
+      debugPrint('Erreur toggleFavorite: $e');
+      final proId = (pro['id'] ?? pro['uid'] ?? '').toString();
+      if (_localFavoriteIds.contains(proId)) {
+        _localFavoriteIds.remove(proId);
+        _localFavoritesList.removeWhere((p) => (p['id'] ?? p['uid']) == proId);
+        return false;
+      } else {
+        _localFavoriteIds.add(proId);
+        _localFavoritesList.insert(0, Map<String, dynamic>.from(pro));
+        return true;
+      }
+    }
+  }
+
+  /// Écoute en temps réel la liste des artisans favoris du client
+  Stream<List<Map<String, dynamic>>> streamFavorites() {
+    String? clientId;
+    if (_isFirebaseInitialized) {
+      final user = FirebaseAuth.instance.currentUser;
+      clientId = user?.uid;
+    }
+
+    if (_isFirebaseInitialized && clientId != null) {
+      return FirebaseFirestore.instance
+          .collection('users')
+          .doc(clientId)
+          .collection('favorites')
+          .snapshots()
+          .map((snapshot) {
+        final list = snapshot.docs.map((doc) {
+          final data = doc.data();
+          data['id'] = doc.id;
+          return data;
+        }).toList();
+
+        _localFavoriteIds.clear();
+        for (final item in list) {
+          _localFavoriteIds.add(item['id'].toString());
+        }
+        return list;
+      });
+    }
+
+    return Stream.value(List<Map<String, dynamic>>.from(_localFavoritesList));
+  }
 }

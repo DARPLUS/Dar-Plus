@@ -6,8 +6,9 @@ import '../providers/locale_provider.dart';
 import '../core/localization/app_localizations.dart';
 import '../services/firebase_service.dart';
 import '../widgets/pro_avatar_widget.dart';
+import 'checkout_screen.dart';
 
-class ServiceDetailScreen extends StatelessWidget {
+class ServiceDetailScreen extends StatefulWidget {
   final Map<String, dynamic> proData;
 
   const ServiceDetailScreen({
@@ -16,7 +17,24 @@ class ServiceDetailScreen extends StatelessWidget {
   });
 
   @override
+  State<ServiceDetailScreen> createState() => _ServiceDetailScreenState();
+}
+
+class _ServiceDetailScreenState extends State<ServiceDetailScreen> {
+  bool _isFav = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final proId = (widget.proData['id'] ?? widget.proData['uid'] ?? 'pro_${widget.proData['name']}').toString();
+    FirebaseService().isFavorite(proId).then((val) {
+      if (mounted) setState(() => _isFav = val);
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final proData = widget.proData;
     context.watch<ThemeProvider>();
     context.watch<LocaleProvider>();
     final theme = Theme.of(context);
@@ -68,13 +86,23 @@ class ServiceDetailScreen extends StatelessWidget {
                     color: Colors.black38,
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(Icons.favorite_border_rounded, color: Colors.white, size: 20),
+                  child: Icon(
+                    _isFav ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                    color: _isFav ? const Color(0xFFEF4444) : Colors.white,
+                    size: 20,
+                  ),
                 ),
-                onPressed: () {
+                onPressed: () async {
+                  final newStatus = await FirebaseService().toggleFavorite(widget.proData);
+                  if (!mounted) return;
+                  setState(() => _isFav = newStatus);
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text('$name ajouté à vos favoris !'),
-                      backgroundColor: const Color(0xFF10B981),
+                      content: Text(newStatus
+                          ? '$name ajouté à vos favoris !'
+                          : '$name retiré de vos favoris.'),
+                      backgroundColor: newStatus ? const Color(0xFF10B981) : Colors.grey.shade700,
+                      duration: const Duration(seconds: 2),
                     ),
                   );
                 },
@@ -886,10 +914,10 @@ class ServiceDetailScreen extends StatelessWidget {
 
                                 setModalState(() => isSubmitting = true);
 
-                                final proId = proData['id'] ??
-                                    proData['uid'] ??
-                                    'pro_${proData['name']}';
-                                final proPhone = proData['phone'] ?? '';
+                                final proId = widget.proData['id'] ??
+                                    widget.proData['uid'] ??
+                                    'pro_${widget.proData['name']}';
+                                final proPhone = widget.proData['phone'] ?? '';
 
                                 final res =
                                     await FirebaseService().createBooking(
@@ -921,6 +949,27 @@ class ServiceDetailScreen extends StatelessWidget {
                                         : const Color(0xFFDC2626),
                                   ),
                                 );
+
+                                if (isSuccess && res['id'] != null && context.mounted) {
+                                  final numMatch = RegExp(r'(\d+([.,]\d+)?)').firstMatch(price);
+                                  final double parsedBase = numMatch != null
+                                      ? double.tryParse(numMatch.group(1)!.replaceAll(',', '.')) ?? 45.0
+                                      : 45.0;
+
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) => CheckoutScreen(
+                                        bookingId: res['id'].toString(),
+                                        proId: proId.toString(),
+                                        proName: proName,
+                                        serviceType: serviceType,
+                                        baseAmount: parsedBase,
+                                        address: address,
+                                        scheduledDate: scheduledDate,
+                                      ),
+                                    ),
+                                  );
+                                }
                               },
                       ),
                     ),

@@ -65,6 +65,7 @@ class DarPlusApp extends StatelessWidget {
       darkTheme: AppTheme.darkTheme,
       themeMode: themeProvider.themeMode,
 
+
       // Localization & RTL support powered by EasyLocalization
       localizationsDelegates: [
         ...context.localizationDelegates,

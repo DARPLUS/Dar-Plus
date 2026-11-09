@@ -109,6 +109,8 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    context.watch<ThemeProvider>();
+    context.watch<LocaleProvider>();
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bgCream = isDark ? const Color(0xFF0F172A) : const Color(0xFFFAF7F2);
     const orangeAccent = Color(0xFFE05D38);
@@ -242,7 +244,7 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Bonjour,',
+                      '${'pro_greeting'.tr()},',
                       style: TextStyle(
                         fontSize: 13,
                         color: Colors.white.withValues(alpha: 0.75),
@@ -376,8 +378,8 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                     children: [
                       Text(
                         _isAvailable
-                            ? 'Vous êtes disponible'
-                            : 'Vous êtes indisponible',
+                            ? 'pro_status_available'.tr()
+                            : 'pro_status_unavailable'.tr(),
                         style: const TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.bold,
@@ -387,8 +389,8 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                       const SizedBox(height: 2),
                       Text(
                         _isAvailable
-                            ? 'Les clients peuvent vous contacter'
-                            : 'Vous ne recevez pas de demandes',
+                            ? 'pro_available_sub'.tr()
+                            : 'pro_unavailable_sub'.tr(),
                         style: TextStyle(
                           fontSize: 12,
                           color: Colors.white.withValues(alpha: 0.72),
@@ -412,8 +414,8 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                       SnackBar(
                         content: Text(
                           val
-                              ? 'Statut: Vous êtes maintenant Disponible !'
-                              : 'Statut: Vous êtes maintenant Hors ligne.',
+                              ? 'pro_status_online_snack'.tr()
+                              : 'pro_status_offline_snack'.tr(),
                         ),
                         backgroundColor: val
                             ? const Color(0xFF0E4B3E)
@@ -437,7 +439,7 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                   icon: Icons.savings_rounded,
                   iconColor: const Color(0xFFF59E0B),
                   value: '1690 TND',
-                  label: 'Ce mois',
+                  label: 'pro_stat_month'.tr(),
                 ),
               ),
               const SizedBox(width: 10),
@@ -446,7 +448,7 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                   icon: Icons.check_box_rounded,
                   iconColor: const Color(0xFF10B981),
                   value: '3',
-                  label: 'Aujourd\'hui',
+                  label: 'pro_stat_today'.tr(),
                 ),
               ),
               const SizedBox(width: 10),
@@ -455,7 +457,7 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                   icon: Icons.star_rounded,
                   iconColor: const Color(0xFFF59E0B),
                   value: '4.9/5',
-                  label: 'Note',
+                  label: 'pro_stat_rating'.tr(),
                 ),
               ),
             ],
@@ -516,7 +518,7 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
             context: context,
             icon: Icons.assignment_outlined,
             iconColor: const Color(0xFF475569),
-            label: 'Demandes',
+            label: 'pro_action_requests'.tr(),
             badgeCount: 2,
             onTap: () => _showPendingRequestsSheet(context),
           ),
@@ -528,7 +530,7 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
             context: context,
             icon: Icons.calendar_month_rounded,
             iconColor: const Color(0xFF3B82F6),
-            label: 'Dispo.',
+            label: 'pro_action_availability'.tr(),
             onTap: () {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
@@ -546,7 +548,7 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
             context: context,
             icon: Icons.chat_bubble_outline_rounded,
             iconColor: const Color(0xFF8B5CF6),
-            label: 'Messages',
+            label: 'pro_action_messages'.tr(),
             badgeCount: 3,
             onTap: () {
               ScaffoldMessenger.of(context).showSnackBar(
@@ -565,7 +567,7 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
             context: context,
             icon: Icons.monetization_on_outlined,
             iconColor: const Color(0xFFF59E0B),
-            label: 'Revenus',
+            label: 'pro_action_revenue'.tr(),
             onTap: () {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
@@ -691,8 +693,8 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    '2 nouvelles demandes!',
+                  Text(
+                    'pro_new_requests_banner'.tr(),
                     style: TextStyle(
                       fontSize: 14.5,
                       fontWeight: FontWeight.bold,
@@ -701,7 +703,7 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    'Répondez vite pour ne pas les perdre',
+                    'pro_respond_fast'.tr(),
                     style: TextStyle(
                       fontSize: 12,
                       color: isDark ? const Color(0xFFA8A29E) : const Color(0xFF78716C),
@@ -740,7 +742,7 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  'Interventions d\'aujourd\'hui',
+                  'pro_today_interventions_title'.tr(),
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
@@ -758,8 +760,8 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                   ),
                 );
               },
-              child: const Text(
-                'Voir tout',
+              child: Text(
+                'see_all'.tr(),
                 style: TextStyle(
                   fontSize: 13.5,
                   fontWeight: FontWeight.bold,
@@ -944,7 +946,7 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
               ),
               const SizedBox(width: 8),
               Text(
-                'Performance cette semaine',
+                'pro_weekly_performance_title'.tr(),
                 style: TextStyle(
                   fontSize: 15.5,
                   fontWeight: FontWeight.bold,
@@ -957,7 +959,7 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
 
           // 1. Taux d'acceptation
           _buildPerformanceBar(
-            title: 'Taux d\'acceptation',
+            title: 'pro_acceptance_rate'.tr(),
             valueText: '94%',
             valueColor: const Color(0xFF10B981),
             progress: 0.94,
@@ -967,7 +969,7 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
 
           // 2. Ponctualité
           _buildPerformanceBar(
-            title: 'Ponctualité',
+            title: 'pro_punctuality'.tr(),
             valueText: '98%',
             valueColor: const Color(0xFF0284C7),
             progress: 0.98,
@@ -977,7 +979,7 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
 
           // 3. Satisfaction client
           _buildPerformanceBar(
-            title: 'Satisfaction client',
+            title: 'pro_customer_satisfaction'.tr(),
             valueText: '4.9/5',
             valueColor: const Color(0xFFF59E0B),
             progress: 0.98,
@@ -1070,13 +1072,13 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
           fontSize: 11,
         ),
         items: [
-          const BottomNavigationBarItem(
-            icon: Icon(Icons.grid_view_rounded),
-            label: 'Tableau',
+          BottomNavigationBarItem(
+            icon: const Icon(Icons.grid_view_rounded),
+            label: 'pro_tab_dashboard'.tr(),
           ),
-          const BottomNavigationBarItem(
-            icon: Icon(Icons.calendar_today_rounded),
-            label: 'Demandes',
+          BottomNavigationBarItem(
+            icon: const Icon(Icons.calendar_today_rounded),
+            label: 'pro_tab_requests'.tr(),
           ),
           BottomNavigationBarItem(
             icon: Stack(
@@ -1097,15 +1099,15 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                 ),
               ],
             ),
-            label: 'Messages',
+            label: 'pro_tab_messages'.tr(),
           ),
-          const BottomNavigationBarItem(
-            icon: Icon(Icons.attach_money_rounded),
-            label: 'Revenus',
+          BottomNavigationBarItem(
+            icon: const Icon(Icons.attach_money_rounded),
+            label: 'pro_tab_revenue'.tr(),
           ),
-          const BottomNavigationBarItem(
-            icon: Icon(Icons.person_outline_rounded),
-            label: 'Compte',
+          BottomNavigationBarItem(
+            icon: const Icon(Icons.person_outline_rounded),
+            label: 'pro_tab_account'.tr(),
           ),
         ],
       ),
@@ -1256,7 +1258,7 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                           );
                         },
                         icon: const Icon(Icons.phone_in_talk_rounded, size: 18),
-                        label: const Text('Appeler'),
+                        label: Text('pro_call_client'.tr()),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: const Color(0xFF0F2D2A),
                           side: const BorderSide(color: Color(0xFF0F2D2A)),
@@ -1280,7 +1282,7 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                           );
                         },
                         icon: const Icon(Icons.navigation_rounded, size: 18),
-                        label: const Text('Itinéraire'),
+                        label: Text('pro_directions'.tr()),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF0F2D2A),
                           foregroundColor: Colors.white,
@@ -1338,7 +1340,7 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                   ),
                 ),
                 Text(
-                  'Nouvelles demandes en attente',
+                  'pro_pending_sheet_title'.tr(),
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
@@ -1430,7 +1432,7 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                                     borderRadius: BorderRadius.circular(12),
                                   ),
                                 ),
-                                child: const Text('Décliner'),
+                                child: Text('pro_decline'.tr()),
                               ),
                             ),
                             const SizedBox(width: 10),
@@ -1452,7 +1454,7 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                                     borderRadius: BorderRadius.circular(12),
                                   ),
                                 ),
-                                child: const Text('Accepter'),
+                                child: Text('pro_accept'.tr()),
                               ),
                             ),
                           ],

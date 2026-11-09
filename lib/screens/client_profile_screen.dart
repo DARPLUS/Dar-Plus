@@ -597,10 +597,13 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    context.watch<ThemeProvider>();
+    context.watch<LocaleProvider>();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final topPadding = MediaQuery.of(context).padding.top;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFFAF7F2),
+      backgroundColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFFAF7F2),
       body: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -624,8 +627,8 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text(
-                        'Profil',
+                      Text(
+                        'profile'.tr(),
                         style: TextStyle(
                           color: Colors.white,
                           fontSize: 24,
@@ -716,17 +719,17 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                     children: [
                       _buildHeaderStatCard(
                         count: '12',
-                        label: 'Réservations',
+                        label: 'bookings'.tr(),
                       ),
                       const SizedBox(width: 10),
                       _buildHeaderStatCard(
                         count: '4.8',
-                        label: 'Ma note',
+                        label: 'client_my_rating'.tr(),
                       ),
                       const SizedBox(width: 10),
                       _buildHeaderStatCard(
                         count: '3',
-                        label: 'Favoris',
+                        label: 'favorites'.tr(),
                       ),
                     ],
                   ),
@@ -741,13 +744,13 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // SECTION 1: COMPTE
-                  _buildSectionHeader('COMPTE'),
+                  _buildSectionHeader('account_header'.tr()),
                   _buildCardContainer([
                     _buildMenuItem(
                       icon: Icons.edit_outlined,
                       iconBg: const Color(0xFFFEF3C7),
                       iconColor: const Color(0xFFD97706),
-                      title: 'Modifier le profil',
+                      title: 'client_edit_profile'.tr(),
                       onTap: _showEditProfileDialog,
                     ),
                     _buildDivider(),
@@ -755,7 +758,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                       icon: Icons.lock_reset_rounded,
                       iconBg: const Color(0xFFE0E7FF),
                       iconColor: const Color(0xFF4338CA),
-                      title: 'Sécurité & Mot de passe',
+                      title: 'client_security_password'.tr(),
                       onTap: _showChangePasswordDialog,
                     ),
                     _buildDivider(),
@@ -763,7 +766,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                       icon: Icons.notifications_none_rounded,
                       iconBg: const Color(0xFFFEF3C7),
                       iconColor: const Color(0xFFF59E0B),
-                      title: 'Notifications',
+                      title: 'client_notifications'.tr(),
                       onTap: () {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(content: Text('Centre de notifications client')),
@@ -911,8 +914,11 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                       width: double.infinity,
                       height: 54,
                       decoration: BoxDecoration(
-                        color: const Color(0xFFFEE2E2), // Soft pink/red
+                        color: isDark ? const Color(0xFF450A0A) : const Color(0xFFFEE2E2),
                         borderRadius: BorderRadius.circular(18),
+                        border: Border.all(
+                          color: isDark ? const Color(0xFF7F1D1D) : const Color(0xFFFECACA),
+                        ),
                       ),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -1257,7 +1263,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
           children: [
             _buildIconBadge(
               icon: icon,
-              bgColor: isDark ? const Color(0xFF0F172A) : iconBg,
+              bgColor: isDark ? iconColor.withValues(alpha: 0.2) : iconBg,
               iconColor: iconColor,
             ),
             const SizedBox(width: 14),
@@ -1328,7 +1334,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
           decoration: BoxDecoration(
             color: isSelected
                 ? const Color(0xFF0C5050)
-                : (isDark ? const Color(0xFF0F172A) : Colors.white),
+                : (isDark ? const Color(0xFF1E293B) : Colors.white),
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
               color: isSelected

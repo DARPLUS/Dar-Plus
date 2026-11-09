@@ -4,6 +4,9 @@ import 'package:flutter/material.dart';
 import '../services/firebase_service.dart';
 import '../theme/app_theme.dart';
 import '../core/localization/app_localizations.dart';
+import 'package:provider/provider.dart';
+import '../providers/theme_provider.dart';
+import '../providers/locale_provider.dart';
 import 'admin_requests_screen.dart';
 import 'client_profile_screen.dart';
 import 'catalog_search_screen.dart';
@@ -270,6 +273,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    context.watch<ThemeProvider>();
+    context.watch<LocaleProvider>();
     final topPadding = MediaQuery.of(context).padding.top;
 
     return Scaffold(
@@ -657,7 +662,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Argent • 820 pts',
+                              context.tr('client_silver_pts'),
                               style: TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.bold,
@@ -665,7 +670,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                             ),
                             Text(
-                              'Programme fidélité',
+                              context.tr('client_loyalty_sub'),
                               style: TextStyle(
                                 fontSize: 11,
                                 color: subColor,
@@ -700,8 +705,8 @@ class _HomeScreenState extends State<HomeScreen> {
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text(
-                              '3 coupons',
+                            Text(
+                              context.tr('client_coupons_count'),
                               style: TextStyle(
                                 fontSize: 12.5,
                                 fontWeight: FontWeight.bold,
@@ -769,7 +774,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         const Text('🎉', style: TextStyle(fontSize: 13)),
                         const SizedBox(width: 6),
                         Text(
-                          'Offre limitée',
+                          context.tr('client_limited_offer'),
                           style: TextStyle(
                             color: Colors.white.withValues(alpha: 0.9),
                             fontSize: 12,
@@ -779,8 +784,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       ],
                     ),
                     const SizedBox(height: 6),
-                    const Text(
-                      '-20% sur tout ce weekend',
+                    Text(
+                      context.tr('client_promo_title'),
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 18,
@@ -807,8 +812,8 @@ class _HomeScreenState extends State<HomeScreen> {
                           borderRadius: BorderRadius.circular(16),
                         ),
                       ),
-                      child: const Text(
-                        'J\'en profite',
+                      child: Text(
+                        context.tr('client_claim_offer'),
                         style: TextStyle(
                           fontSize: 12.5,
                           fontWeight: FontWeight.bold,
@@ -964,7 +969,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 }
                 final pros = snapshot.data ?? [];
                 if (pros.isEmpty) {
-                  return const Center(child: Text('Aucun professionnel disponible pour le moment'));
+                  return Center(child: Text(context.tr('client_no_pro_available')));
                 }
                 return ListView.builder(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -1103,7 +1108,7 @@ class _HomeScreenState extends State<HomeScreen> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Text(
-              'Près de vous',
+              context.tr('client_near_you'),
               style: TextStyle(
                 fontSize: 19,
                 fontWeight: FontWeight.bold,
@@ -1134,7 +1139,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: Padding(
                       padding: const EdgeInsets.all(20),
                       child: Text(
-                        'Aucun professionnel trouvé',
+                        context.tr('client_no_pro_found'),
                         style: TextStyle(color: Colors.grey.shade600),
                       ),
                     ),
@@ -1308,7 +1313,7 @@ class _HomeScreenState extends State<HomeScreen> {
             const Icon(Icons.favorite_rounded, size: 54, color: Color(0xFFDE6D1B)),
             const SizedBox(height: 12),
             Text(
-              'Vos professionnels favoris',
+              context.tr('client_favorite_pros_title'),
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
@@ -1317,7 +1322,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const SizedBox(height: 6),
             Text(
-              'Retrouvez vos pros préférés ici',
+              context.tr('client_favorite_pros_sub'),
               style: TextStyle(color: isDark ? Colors.grey.shade400 : Colors.grey),
             ),
           ],

@@ -1,9 +1,14 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:provider/provider.dart';
+import 'package:easy_localization/easy_localization.dart';
 import '../theme/app_theme.dart';
 import '../services/firebase_service.dart';
+import '../providers/theme_provider.dart';
+import '../providers/locale_provider.dart';
 import 'login_screen.dart';
 
 class ClientProfileScreen extends StatefulWidget {
@@ -27,9 +32,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
   late String _currentEmail;
   late String _currentPhone;
   String? _photoBase64;
-
-  bool _isDarkMode = false;
-  String _selectedLang = 'FR'; // 'FR', 'EN', 'AR'
+  String? _photoUrl;
 
   @override
   void initState() {
@@ -53,6 +56,9 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
           }
           if (data['phone'] != null && data['phone'].toString().trim().isNotEmpty) {
             _currentPhone = data['phone'].toString().trim();
+          }
+          if (data['photoUrl'] != null && data['photoUrl'].toString().trim().isNotEmpty) {
+            _photoUrl = data['photoUrl'].toString().trim();
           }
           if (data['photoBase64'] != null && data['photoBase64'].toString().trim().isNotEmpty) {
             _photoBase64 = data['photoBase64'].toString().trim();
@@ -104,7 +110,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                 subtitle: const Text('Utiliser l\'appareil photo', style: TextStyle(fontSize: 12, color: Color(0xFF64748B))),
                 onTap: () { Navigator.pop(ctx); _pickImage(ImageSource.camera); },
               ),
-              if (_photoBase64 != null && _photoBase64!.isNotEmpty) ...[
+              if ((_photoBase64 != null && _photoBase64!.isNotEmpty) || (_photoUrl != null && _photoUrl!.isNotEmpty)) ...[
                 const SizedBox(height: 6),
                 ListTile(
                   leading: Container(
@@ -129,30 +135,78 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
       final picker = ImagePicker();
       final picked = await picker.pickImage(source: source, maxWidth: 512, maxHeight: 512, imageQuality: 70);
       if (picked != null) {
-        final Uint8List bytes = await picked.readAsBytes();
-        final base64Str = base64Encode(bytes);
-        setState(() { _photoBase64 = base64Str; });
-        await FirebaseService().updateCurrentUserData(fullName: _currentName, phone: _currentPhone, email: _currentEmail, photoBase64: base64Str);
+        final file = File(picked.path);
+        
+        // Show loading indicator
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Photo de profil mise à jour !'), backgroundColor: Color(0xFF10B981)));
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Row(children: [
+              SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)),
+              SizedBox(width: 12),
+              Text('Upload en cours...'),
+            ]),
+            backgroundColor: Color(0xFF0C5050),
+            duration: Duration(seconds: 10),
+          ));
+        }
+
+        // Upload to Firebase Storage
+        final downloadUrl = await FirebaseService().uploadProfileImage(file);
+        
+        if (downloadUrl != null) {
+          setState(() {
+            _photoUrl = downloadUrl;
+            _photoBase64 = null; // Clear old base64
+          });
+          if (mounted) {
+            ScaffoldMessenger.of(context).hideCurrentSnackBar();
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Photo de profil mise à jour !'), backgroundColor: Color(0xFF10B981)));
+          }
+        } else {
+          // Fallback to base64 if Storage fails
+          final Uint8List bytes = await picked.readAsBytes();
+          final base64Str = base64Encode(bytes);
+          setState(() { _photoBase64 = base64Str; });
+          await FirebaseService().updateCurrentUserData(photoBase64: base64Str);
+          if (mounted) {
+            ScaffoldMessenger.of(context).hideCurrentSnackBar();
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Photo mise à jour (mode local).'), backgroundColor: Color(0xFFD97706)));
+          }
         }
       }
     } catch (e) {
       if (mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erreur : $e'), backgroundColor: Colors.redAccent));
       }
     }
   }
 
   Future<void> _removePhoto() async {
-    setState(() { _photoBase64 = null; });
-    await FirebaseService().updateCurrentUserData(fullName: _currentName, phone: _currentPhone, email: _currentEmail, photoBase64: '');
+    setState(() { _photoBase64 = null; _photoUrl = null; });
+    await FirebaseService().updateCurrentUserData(photoBase64: '');
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Photo de profil supprimée.'), backgroundColor: Color(0xFF64748B)));
     }
   }
 
   Widget _buildProfileAvatar({double size = 68, double fontSize = 22, double borderRadius = 18}) {
+    // Priority 1: Firebase Storage URL
+    if (_photoUrl != null && _photoUrl!.isNotEmpty) {
+      return Container(
+        width: size, height: size,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(borderRadius),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.4), width: 2),
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 8, offset: const Offset(0, 3))],
+          image: DecorationImage(
+            image: NetworkImage(_photoUrl!),
+            fit: BoxFit.cover,
+          ),
+        ),
+      );
+    }
+    // Priority 2: Legacy base64
     if (_photoBase64 != null && _photoBase64!.isNotEmpty) {
       try {
         final bytes = base64Decode(_photoBase64!);
@@ -721,7 +775,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                       icon: Icons.favorite_border_rounded,
                       iconBg: const Color(0xFFFCE7F3),
                       iconColor: const Color(0xFFEC4899),
-                      title: 'Favoris',
+                      title: 'favorites'.tr(),
                       onTap: () {},
                     ),
                     _buildDivider(),
@@ -729,7 +783,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                       icon: Icons.assignment_outlined,
                       iconBg: const Color(0xFFE0E7FF),
                       iconColor: const Color(0xFF6366F1),
-                      title: 'Historique',
+                      title: 'history'.tr(),
                       onTap: () {},
                     ),
                     _buildDivider(),
@@ -737,7 +791,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                       icon: Icons.emoji_events_outlined,
                       iconBg: const Color(0xFFFEF9C3),
                       iconColor: const Color(0xFFEAB308),
-                      title: 'Programme Fidélité',
+                      title: 'loyalty_program'.tr(),
                       onTap: () {},
                     ),
                     _buildDivider(),
@@ -745,7 +799,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                       icon: Icons.confirmation_number_outlined,
                       iconBg: const Color(0xFFFFE4E6),
                       iconColor: const Color(0xFFF43F5E),
-                      title: 'Coupons & Promos',
+                      title: 'coupons_promos'.tr(),
                       onTap: () {},
                     ),
                     _buildDivider(),
@@ -753,7 +807,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                       icon: Icons.map_outlined,
                       iconBg: const Color(0xFFE0F2FE),
                       iconColor: const Color(0xFF0284C7),
-                      title: 'Carte des Pros',
+                      title: 'pros_map'.tr(),
                       onTap: () {},
                     ),
                   ]),
@@ -761,42 +815,9 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                   const SizedBox(height: 20),
 
                   // SECTION 2: PRÉFÉRENCES (matches screenshot 2)
-                  _buildSectionHeader('PRÉFÉRENCES'),
+                  _buildSectionHeader('preferences_header'.tr()),
                   _buildCardContainer([
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                      child: Row(
-                        children: [
-                          _buildIconBadge(
-                            icon: Icons.nightlight_round,
-                            bgColor: const Color(0xFFFEF3C7),
-                            iconColor: const Color(0xFFD97706),
-                          ),
-                          const SizedBox(width: 14),
-                          const Expanded(
-                            child: Text(
-                              'Mode Sombre',
-                              style: TextStyle(
-                                fontSize: 14.5,
-                                fontWeight: FontWeight.w600,
-                                color: Color(0xFF0F172A),
-                              ),
-                            ),
-                          ),
-                          Switch(
-                            value: _isDarkMode,
-                            activeThumbColor: const Color(0xFF0C5050),
-                            activeTrackColor:
-                                const Color(0xFF0C5050).withValues(alpha: 0.35),
-                            onChanged: (val) {
-                              setState(() {
-                                _isDarkMode = val;
-                              });
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
+                    _buildThemeTile(Theme.of(context).brightness == Brightness.dark),
                     _buildDivider(),
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -804,24 +825,28 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                         children: [
                           _buildIconBadge(
                             icon: Icons.language_rounded,
-                            bgColor: const Color(0xFFE0F2FE),
+                            bgColor: Theme.of(context).brightness == Brightness.dark
+                                ? const Color(0xFF0F172A)
+                                : const Color(0xFFE0F2FE),
                             iconColor: const Color(0xFF0284C7),
                           ),
                           const SizedBox(width: 14),
-                          const Expanded(
+                          Expanded(
                             child: Text(
-                              'Langue',
+                              'language'.tr(),
                               style: TextStyle(
                                 fontSize: 14.5,
                                 fontWeight: FontWeight.w600,
-                                color: Color(0xFF0F172A),
+                                color: Theme.of(context).brightness == Brightness.dark
+                                    ? Colors.white
+                                    : const Color(0xFF0F172A),
                               ),
                             ),
                           ),
                           Text(
-                            _selectedLang == 'FR'
+                            context.locale.languageCode == 'fr'
                                 ? 'Français'
-                                : (_selectedLang == 'EN' ? 'English' : 'العربية'),
+                                : (context.locale.languageCode == 'en' ? 'English' : 'العربية'),
                             style: const TextStyle(
                               fontSize: 13.5,
                               color: Color(0xFF64748B),
@@ -835,13 +860,13 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                   const SizedBox(height: 20),
 
                   // SECTION 3: SUPPORT (matches screenshot 2)
-                  _buildSectionHeader('SUPPORT'),
+                  _buildSectionHeader('support_header'.tr()),
                   _buildCardContainer([
                     _buildMenuItem(
                       icon: Icons.help_outline_rounded,
                       iconBg: const Color(0xFFFFE4E6),
                       iconColor: const Color(0xFFE11D48),
-                      title: 'Aide & Support',
+                      title: 'help'.tr(),
                       onTap: () {},
                     ),
                     _buildDivider(),
@@ -849,7 +874,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                       icon: Icons.star_outline_rounded,
                       iconBg: const Color(0xFFFEF9C3),
                       iconColor: const Color(0xFFEAB308),
-                      title: 'Noter l\'application',
+                      title: 'rate_app'.tr(),
                       onTap: () {},
                     ),
                     _buildDivider(),
@@ -857,7 +882,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                       icon: Icons.share_outlined,
                       iconBg: const Color(0xFFE0F2FE),
                       iconColor: const Color(0xFF0284C7),
-                      title: 'Partager l\'app',
+                      title: 'share_app'.tr(),
                       onTap: () {},
                     ),
                   ]),
@@ -865,7 +890,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                   const SizedBox(height: 20),
 
                   // SECTION 4: LANGUE (matches screenshot 3)
-                  _buildSectionHeader('LANGUE'),
+                  _buildSectionHeader('language_header'.tr()),
                   Row(
                     children: [
                       _buildLangPill('FR', 'FR', 'FR'),
@@ -889,18 +914,18 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                         color: const Color(0xFFFEE2E2), // Soft pink/red
                         borderRadius: BorderRadius.circular(18),
                       ),
-                      child: const Row(
+                      child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(
+                          const Icon(
                             Icons.door_back_door_outlined,
                             color: Color(0xFFDC2626),
                             size: 20,
                           ),
-                          SizedBox(width: 8),
+                          const SizedBox(width: 8),
                           Text(
-                            'Déconnexion',
-                            style: TextStyle(
+                            'logout'.tr(),
+                            style: const TextStyle(
                               color: Color(0xFFDC2626),
                               fontSize: 15,
                               fontWeight: FontWeight.bold,
@@ -976,15 +1001,234 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
     );
   }
 
+  Widget _buildThemeTile(bool isDark) {
+    final themeProvider = context.watch<ThemeProvider>();
+    final themeMode = themeProvider.themeMode;
+
+    String subtitle = 'theme_system'.tr();
+    String badgeText = 'theme_auto'.tr();
+    IconData icon = Icons.brightness_auto_rounded;
+    Color iconColor = const Color(0xFF3B82F6);
+    Color bgColor = isDark ? const Color(0xFF1E3A8A) : const Color(0xFFDBEAFE);
+
+    if (themeMode == ThemeMode.dark) {
+      subtitle = 'theme_dark'.tr();
+      badgeText = 'theme_dark_badge'.tr();
+      icon = Icons.dark_mode_rounded;
+      iconColor = const Color(0xFFF59E0B);
+      bgColor = isDark ? const Color(0xFF78350F) : const Color(0xFFFEF3C7);
+    } else if (themeMode == ThemeMode.light) {
+      subtitle = 'theme_light'.tr();
+      badgeText = 'theme_light_badge'.tr();
+      icon = Icons.light_mode_rounded;
+      iconColor = const Color(0xFFEA580C);
+      bgColor = isDark ? const Color(0xFF7C2D12) : const Color(0xFFFFEDD5);
+    }
+
+    return InkWell(
+      onTap: () => _showThemeDialog(context),
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(
+          children: [
+            _buildIconBadge(
+              icon: icon,
+              bgColor: bgColor,
+              iconColor: iconColor,
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'theme_mode'.tr(),
+                    style: TextStyle(
+                      fontSize: 14.5,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? Colors.white : const Color(0xFF0F172A),
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF334155) : const Color(0xFFF1F5F9),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    badgeText,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? Colors.white : const Color(0xFF0C5050),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    size: 16,
+                    color: isDark ? Colors.white70 : const Color(0xFF64748B),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showThemeDialog(BuildContext context) {
+    final themeProvider = context.read<ThemeProvider>();
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            children: [
+              const Icon(Icons.palette_rounded, color: Color(0xFF0C5050)),
+              const SizedBox(width: 10),
+              Text('theme_choose'.tr(), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildThemeOption(
+                ctx: ctx,
+                provider: themeProvider,
+                mode: ThemeMode.system,
+                icon: Icons.brightness_auto_rounded,
+                iconColor: const Color(0xFF3B82F6),
+                title: 'theme_system'.tr(),
+                subtitle: 'theme_subtitle_system'.tr(),
+              ),
+              _buildThemeOption(
+                ctx: ctx,
+                provider: themeProvider,
+                mode: ThemeMode.light,
+                icon: Icons.light_mode_rounded,
+                iconColor: Colors.orange,
+                title: 'theme_light'.tr(),
+              ),
+              _buildThemeOption(
+                ctx: ctx,
+                provider: themeProvider,
+                mode: ThemeMode.dark,
+                icon: Icons.dark_mode_rounded,
+                iconColor: Colors.amber,
+                title: 'theme_dark'.tr(),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: Text('close'.tr(), style: const TextStyle(color: Colors.grey)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildThemeOption({
+    required BuildContext ctx,
+    required ThemeProvider provider,
+    required ThemeMode mode,
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    String? subtitle,
+  }) {
+    final isSelected = provider.themeMode == mode;
+    final isDark = Theme.of(ctx).brightness == Brightness.dark;
+
+    return InkWell(
+      onTap: () {
+        provider.setThemeMode(mode);
+        Navigator.pop(ctx);
+      },
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? (isDark ? const Color(0xFF0F2D2A) : const Color(0xFFE8F5F3))
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: isSelected ? const Color(0xFF0C5050) : Colors.transparent,
+            width: 1.2,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: iconColor, size: 22),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                      fontSize: 14,
+                      color: isDark ? Colors.white : const Color(0xFF0F172A),
+                    ),
+                  ),
+                  if (subtitle != null) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            if (isSelected)
+              const Icon(Icons.check_circle_rounded, color: Color(0xFF0C5050), size: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildCardContainer(List<Widget> children) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: isDark ? const Color(0xFF1E293B) : Colors.white,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFEAE5DC), width: 1.1),
+        border: Border.all(
+          color: isDark ? const Color(0xFF334155) : const Color(0xFFEAE5DC),
+          width: 1.1,
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.02),
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.02),
             blurRadius: 10,
             offset: const Offset(0, 3),
           ),
@@ -1003,6 +1247,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
     required String title,
     required VoidCallback onTap,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(20),
@@ -1012,17 +1257,17 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
           children: [
             _buildIconBadge(
               icon: icon,
-              bgColor: iconBg,
+              bgColor: isDark ? const Color(0xFF0F172A) : iconBg,
               iconColor: iconColor,
             ),
             const SizedBox(width: 14),
             Expanded(
               child: Text(
                 title,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 14.5,
                   fontWeight: FontWeight.w600,
-                  color: Color(0xFF0F172A),
+                  color: isDark ? Colors.white : const Color(0xFF0F172A),
                 ),
               ),
             ),
@@ -1055,33 +1300,40 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
   }
 
   Widget _buildDivider() {
-    return const Divider(
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Divider(
       height: 1,
       thickness: 1,
-      color: Color(0xFFF1ECE4),
+      color: isDark ? const Color(0xFF334155) : const Color(0xFFF1ECE4),
       indent: 64,
     );
   }
 
   Widget _buildLangPill(String key, String prefix, String label) {
-    final isSelected = _selectedLang == key;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final currentLang = context.locale.languageCode.toUpperCase();
+    final isSelected = currentLang == key.toUpperCase();
 
     return Expanded(
       child: GestureDetector(
-        onTap: () {
-          setState(() {
-            _selectedLang = key;
-          });
+        onTap: () async {
+          final targetLocale = Locale(key.toLowerCase());
+          await context.setLocale(targetLocale);
+          if (mounted) {
+            context.read<LocaleProvider>().setLocale(targetLocale);
+          }
         },
         child: Container(
           height: 48,
           decoration: BoxDecoration(
-            color: isSelected ? const Color(0xFF0C5050) : Colors.white,
+            color: isSelected
+                ? const Color(0xFF0C5050)
+                : (isDark ? const Color(0xFF0F172A) : Colors.white),
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
               color: isSelected
                   ? const Color(0xFF0C5050)
-                  : const Color(0xFFE2E8F0),
+                  : (isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
               width: 1.2,
             ),
           ),
@@ -1105,7 +1357,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.bold,
-                  color: isSelected ? Colors.white : const Color(0xFF0F172A),
+                  color: isSelected ? Colors.white : (isDark ? Colors.white : const Color(0xFF0F172A)),
                 ),
               ),
             ],

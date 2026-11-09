@@ -101,9 +101,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     final currentSlide = _slides[_currentPage];
     final size = MediaQuery.of(context).size;
     final topPadding = MediaQuery.of(context).padding.top;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? AppTheme.darkBackground : AppTheme.background;
+    final titleColor = AppTheme.titleColorOf(context);
+    final subtitleColor = AppTheme.subtitleColorOf(context);
 
     return Scaffold(
-      backgroundColor: AppTheme.background,
+      backgroundColor: bgColor,
       body: Stack(
         children: [
           // 1. Swipable PageView
@@ -152,8 +156,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                                 colors: [
                                   Colors.transparent,
                                   Colors.transparent,
-                                  AppTheme.background.withValues(alpha: 0.7),
-                                  AppTheme.background,
+                                  bgColor.withValues(alpha: 0.7),
+                                  bgColor,
                                 ],
                               ),
                             ),
@@ -182,11 +186,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                           Text(
                             slide.title,
                             textAlign: TextAlign.center,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontFamily: 'serif',
                               fontSize: 27,
                               fontWeight: FontWeight.bold,
-                              color: AppTheme.titleColor,
+                              color: titleColor,
                               height: 1.25,
                               letterSpacing: -0.3,
                             ),
@@ -196,10 +200,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                           Text(
                             slide.subtitle,
                             textAlign: TextAlign.center,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontFamily: 'sans-serif',
                               fontSize: 15,
-                              color: AppTheme.subtitleColor,
+                              color: subtitleColor,
                               height: 1.45,
                               letterSpacing: 0.1,
                             ),
@@ -276,8 +280,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                         child: ElevatedButton(
                           onPressed: _goToLogin,
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: AppTheme.secondaryButtonBg,
-                            foregroundColor: AppTheme.titleColor,
+                            backgroundColor: isDark ? const Color(0xFF1E293B) : AppTheme.secondaryButtonBg,
+                            foregroundColor: titleColor,
                             elevation: 0,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(18),

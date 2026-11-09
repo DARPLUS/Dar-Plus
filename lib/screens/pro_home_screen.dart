@@ -1,5 +1,9 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:easy_localization/easy_localization.dart';
+import 'package:provider/provider.dart';
+import '../providers/theme_provider.dart';
+import '../providers/locale_provider.dart';
 import '../theme/app_theme.dart';
 import 'login_screen.dart';
 import '../services/firebase_service.dart';
@@ -105,7 +109,8 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    const bgCream = Color(0xFFFAF7F2);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgCream = isDark ? const Color(0xFF0F172A) : const Color(0xFFFAF7F2);
     const orangeAccent = Color(0xFFE05D38);
 
     return Scaffold(
@@ -583,17 +588,22 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
     int? badgeCount,
     required VoidCallback onTap,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardBg = isDark ? const Color(0xFF1E293B) : Colors.white;
+    final borderColor = isDark ? const Color(0xFF334155) : const Color(0xFFEFE8DE);
+    final textColor = isDark ? Colors.white : const Color(0xFF1E293B);
+
     return GestureDetector(
       onTap: onTap,
       child: Container(
         height: 78,
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: cardBg,
           borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: const Color(0xFFEFE8DE)),
+          border: Border.all(color: borderColor),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.02),
+              color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.02),
               blurRadius: 8,
               offset: const Offset(0, 3),
             ),
@@ -609,10 +619,10 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                 const SizedBox(height: 6),
                 Text(
                   label,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFF1E293B),
+                    color: textColor,
                   ),
                 ),
               ],
@@ -648,15 +658,16 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
 
   // ─── 3. NOTIFICATION BANNER (2 nouvelles demandes!) ────────────────────────
   Widget _buildNotificationBanner(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return GestureDetector(
       onTap: () => _showPendingRequestsSheet(context),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
-          color: const Color(0xFFFEF2E8),
+          color: isDark ? const Color(0xFF2A1B14) : const Color(0xFFFEF2E8),
           borderRadius: BorderRadius.circular(18),
           border: Border.all(
-            color: const Color(0xFFFCDCC5),
+            color: isDark ? const Color(0xFF7C2D12) : const Color(0xFFFCDCC5),
             width: 1.2,
           ),
         ),
@@ -665,8 +676,8 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
             Container(
               width: 44,
               height: 44,
-              decoration: const BoxDecoration(
-                color: Color(0xFFFEE0CB),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF431407) : const Color(0xFFFEE0CB),
                 shape: BoxShape.circle,
               ),
               child: const Icon(
@@ -689,11 +700,11 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                     ),
                   ),
                   const SizedBox(height: 2),
-                  const Text(
+                  Text(
                     'Répondez vite pour ne pas les perdre',
                     style: TextStyle(
                       fontSize: 12,
-                      color: Color(0xFF78716C),
+                      color: isDark ? const Color(0xFFA8A29E) : const Color(0xFF78716C),
                     ),
                   ),
                 ],
@@ -712,25 +723,28 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
 
   // ─── 4. INTERVENTIONS D'AUJOURD'HUI ─────────────────────────────────────────
   Widget _buildInterventionsSection(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDark ? Colors.white : const Color(0xFF0F172A);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Row(
+            Row(
               children: [
-                Text(
+                const Text(
                   '📅',
                   style: TextStyle(fontSize: 16),
                 ),
-                SizedBox(width: 8),
+                const SizedBox(width: 8),
                 Text(
                   'Interventions d\'aujourd\'hui',
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFF0F172A),
+                    color: textColor,
                   ),
                 ),
               ],
@@ -764,18 +778,24 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
 
   Widget _buildInterventionCard(
       BuildContext context, Map<String, dynamic> item) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardBg = isDark ? const Color(0xFF1E293B) : Colors.white;
+    final borderColor = isDark ? const Color(0xFF334155) : const Color(0xFFEFE8DE);
+    final textColor = isDark ? Colors.white : const Color(0xFF0F172A);
+    final subColor = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+
     return GestureDetector(
       onTap: () => _showInterventionDetails(context, item),
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: cardBg,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: const Color(0xFFEFE8DE)),
+          border: Border.all(color: borderColor),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.02),
+              color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.02),
               blurRadius: 8,
               offset: const Offset(0, 2),
             ),
@@ -807,10 +827,10 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                 children: [
                   Text(
                     item['client'],
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.bold,
-                      color: Color(0xFF0F172A),
+                      color: textColor,
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -823,16 +843,16 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                       const SizedBox(width: 3),
                       Text(
                         item['time'],
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
-                          color: Color(0xFF64748B),
+                          color: subColor,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
                       const SizedBox(width: 6),
-                      const Text(
+                      Text(
                         '•',
-                        style: TextStyle(color: Color(0xFF94A3B8)),
+                        style: TextStyle(color: isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8)),
                       ),
                       const SizedBox(width: 6),
                       const Text(
@@ -843,9 +863,9 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                       Expanded(
                         child: Text(
                           item['location'],
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12,
-                            color: Color(0xFF64748B),
+                            color: subColor,
                           ),
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -894,15 +914,20 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
 
   // ─── 5. PERFORMANCE CETTE SEMAINE (matching screenshot 2) ──────────────────
   Widget _buildPerformanceCard() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardBg = isDark ? const Color(0xFF1E293B) : Colors.white;
+    final borderColor = isDark ? const Color(0xFF334155) : const Color(0xFFEFE8DE);
+    final textColor = isDark ? Colors.white : const Color(0xFF0F172A);
+
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: cardBg,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFEFE8DE)),
+        border: Border.all(color: borderColor),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.02),
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.02),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -911,19 +936,19 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          Row(
             children: [
-              Text(
+              const Text(
                 '📊',
                 style: TextStyle(fontSize: 16),
               ),
-              SizedBox(width: 8),
+              const SizedBox(width: 8),
               Text(
                 'Performance cette semaine',
                 style: TextStyle(
                   fontSize: 15.5,
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFF0F172A),
+                  color: textColor,
                 ),
               ),
             ],
@@ -970,6 +995,10 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
     required double progress,
     required Color barColor,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final subColor = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+    final trackColor = isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
+
     return Column(
       children: [
         Row(
@@ -977,9 +1006,9 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
           children: [
             Text(
               title,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
-                color: Color(0xFF64748B),
+                color: subColor,
               ),
             ),
             Text(
@@ -998,7 +1027,7 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
           child: LinearProgressIndicator(
             value: progress,
             minHeight: 7,
-            backgroundColor: const Color(0xFFE2E8F0),
+            backgroundColor: trackColor,
             valueColor: AlwaysStoppedAnimation<Color>(barColor),
           ),
         ),
@@ -1008,12 +1037,15 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
 
   // ─── 6. BOTTOM NAVIGATION BAR (matching screenshot) ────────────────────────
   Widget _buildBottomNavigationBar(Color orangeAccent) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final navBg = isDark ? const Color(0xFF1E293B) : Colors.white;
+
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: navBg,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
             blurRadius: 10,
             offset: const Offset(0, -3),
           ),
@@ -1027,9 +1059,9 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
           });
         },
         type: BottomNavigationBarType.fixed,
-        backgroundColor: Colors.white,
+        backgroundColor: navBg,
         selectedItemColor: orangeAccent,
-        unselectedItemColor: const Color(0xFF64748B),
+        unselectedItemColor: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
         selectedLabelStyle: const TextStyle(
           fontSize: 11.5,
           fontWeight: FontWeight.bold,
@@ -1083,6 +1115,12 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
   // ─── 7. MODALS & DIALOGS ───────────────────────────────────────────────────
   void _showInterventionDetails(
       BuildContext context, Map<String, dynamic> item) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardBg = isDark ? const Color(0xFF1E293B) : Colors.white;
+    final innerBg = isDark ? const Color(0xFF0F172A) : const Color(0xFFFAF7F2);
+    final textColor = isDark ? Colors.white : AppTheme.titleColor;
+    final subColor = isDark ? const Color(0xFF94A3B8) : AppTheme.subtitleColor;
+
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -1090,9 +1128,9 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
       builder: (_) {
         return Container(
           padding: const EdgeInsets.all(24),
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+          decoration: BoxDecoration(
+            color: cardBg,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
           ),
           child: SafeArea(
             top: false,
@@ -1106,7 +1144,7 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                     height: 4,
                     margin: const EdgeInsets.only(bottom: 20),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFE2DDD5),
+                      color: isDark ? const Color(0xFF334155) : const Color(0xFFE2DDD5),
                       borderRadius: BorderRadius.circular(10),
                     ),
                   ),
@@ -1129,18 +1167,18 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                         children: [
                           Text(
                             item['client'],
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
-                              color: AppTheme.titleColor,
+                              color: textColor,
                             ),
                           ),
                           const SizedBox(height: 4),
                           Text(
                             item['service'],
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 13,
-                              color: AppTheme.subtitleColor,
+                              color: subColor,
                             ),
                           ),
                         ],
@@ -1160,7 +1198,7 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                 Container(
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFFAF7F2),
+                    color: innerBg,
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: Column(
@@ -1170,7 +1208,10 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                           const Icon(Icons.access_time_rounded,
                               size: 18, color: Color(0xFF0F2D2A)),
                           const SizedBox(width: 8),
-                          Text('Horaire prévu : Aujourd\'hui à ${item['time']}'),
+                          Text(
+                            'Horaire prévu : Aujourd\'hui à ${item['time']}',
+                            style: TextStyle(color: textColor),
+                          ),
                         ],
                       ),
                       const SizedBox(height: 8),
@@ -1179,7 +1220,10 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                           const Icon(Icons.location_on_rounded,
                               size: 18, color: Color(0xFFE05D38)),
                           const SizedBox(width: 8),
-                          Text('Adresse : ${item['location']}'),
+                          Text(
+                            'Adresse : ${item['location']}',
+                            style: TextStyle(color: textColor),
+                          ),
                         ],
                       ),
                       const SizedBox(height: 8),
@@ -1188,7 +1232,10 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                           const Icon(Icons.phone_rounded,
                               size: 18, color: Color(0xFF10B981)),
                           const SizedBox(width: 8),
-                          Text('Téléphone : ${item['phone']}'),
+                          Text(
+                            'Téléphone : ${item['phone']}',
+                            style: TextStyle(color: textColor),
+                          ),
                         ],
                       ),
                     ],
@@ -1255,6 +1302,13 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
   }
 
   void _showPendingRequestsSheet(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardBg = isDark ? const Color(0xFF1E293B) : Colors.white;
+    final innerBg = isDark ? const Color(0xFF0F172A) : const Color(0xFFFAF7F2);
+    final borderColor = isDark ? const Color(0xFF334155) : const Color(0xFFEFE8DE);
+    final textColor = isDark ? Colors.white : const Color(0xFF0F172A);
+    final subColor = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -1262,9 +1316,9 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
       builder: (_) {
         return Container(
           padding: const EdgeInsets.all(22),
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+          decoration: BoxDecoration(
+            color: cardBg,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
           ),
           child: SafeArea(
             top: false,
@@ -1278,17 +1332,17 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                     height: 4,
                     margin: const EdgeInsets.only(bottom: 18),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFE2DDD5),
+                      color: isDark ? const Color(0xFF334155) : const Color(0xFFE2DDD5),
                       borderRadius: BorderRadius.circular(10),
                     ),
                   ),
                 ),
-                const Text(
+                Text(
                   'Nouvelles demandes en attente',
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFF0F172A),
+                    color: textColor,
                   ),
                 ),
                 const SizedBox(height: 14),
@@ -1297,9 +1351,9 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                     margin: const EdgeInsets.only(bottom: 12),
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFFAF7F2),
+                      color: innerBg,
                       borderRadius: BorderRadius.circular(18),
-                      border: Border.all(color: const Color(0xFFEFE8DE)),
+                      border: Border.all(color: borderColor),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1322,17 +1376,17 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                                 children: [
                                   Text(
                                     req['client'],
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontSize: 15,
                                       fontWeight: FontWeight.bold,
-                                      color: Color(0xFF0F172A),
+                                      color: textColor,
                                     ),
                                   ),
                                   Text(
                                     '${req['time']} • ${req['location']}',
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontSize: 12,
-                                      color: Color(0xFF64748B),
+                                      color: subColor,
                                     ),
                                   ),
                                 ],
@@ -1351,9 +1405,9 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                         const SizedBox(height: 10),
                         Text(
                           req['service'],
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 13,
-                            color: Color(0xFF334155),
+                            color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF334155),
                           ),
                         ),
                         const SizedBox(height: 12),
@@ -1415,16 +1469,198 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
     );
   }
 
+  void _showLanguageDialog(BuildContext context) {
+    final currentCode = context.locale.languageCode;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    Widget buildLangTile(BuildContext ctx, String code, String name) {
+      final isSelected = currentCode == code;
+      return InkWell(
+        onTap: () async {
+          final newLoc = Locale(code);
+          await context.setLocale(newLoc);
+          if (context.mounted) {
+            try {
+              context.read<LocaleProvider>().setLocale(newLoc);
+            } catch (_) {}
+          }
+          if (ctx.mounted) Navigator.pop(ctx);
+        },
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          margin: const EdgeInsets.symmetric(vertical: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? (isDark ? const Color(0xFF0F2D2A) : const Color(0xFFE8F5F3))
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: isSelected ? const Color(0xFF1B413E) : Colors.transparent,
+              width: 1.2,
+            ),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  name,
+                  style: TextStyle(
+                    fontSize: 14.5,
+                    fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                    color: isDark ? Colors.white : const Color(0xFF0F172A),
+                  ),
+                ),
+              ),
+              if (isSelected)
+                const Icon(Icons.check_circle_rounded, color: Color(0xFF1B413E), size: 20),
+            ],
+          ),
+        ),
+      );
+    }
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text('choose_language'.tr()),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            buildLangTile(ctx, 'fr', 'Français 🇫🇷'),
+            buildLangTile(ctx, 'en', 'English 🇬🇧'),
+            buildLangTile(ctx, 'ar', 'العربية 🇹🇳'),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showThemeDialog(BuildContext context) {
+    final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text('theme_choose'.tr()),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildThemeOptionTile(
+              ctx: ctx,
+              provider: themeProvider,
+              mode: ThemeMode.system,
+              icon: Icons.brightness_auto_rounded,
+              iconColor: const Color(0xFF64748B),
+              title: 'theme_system'.tr(),
+              subtitle: 'theme_subtitle_system'.tr(),
+              isDark: isDark,
+            ),
+            _buildThemeOptionTile(
+              ctx: ctx,
+              provider: themeProvider,
+              mode: ThemeMode.light,
+              icon: Icons.light_mode_rounded,
+              iconColor: const Color(0xFFE05D38),
+              title: 'theme_light'.tr(),
+              isDark: isDark,
+            ),
+            _buildThemeOptionTile(
+              ctx: ctx,
+              provider: themeProvider,
+              mode: ThemeMode.dark,
+              icon: Icons.dark_mode_rounded,
+              iconColor: const Color(0xFF6366F1),
+              title: 'theme_dark'.tr(),
+              isDark: isDark,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildThemeOptionTile({
+    required BuildContext ctx,
+    required ThemeProvider provider,
+    required ThemeMode mode,
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    String? subtitle,
+    required bool isDark,
+  }) {
+    final isSelected = provider.themeMode == mode;
+
+    return InkWell(
+      onTap: () {
+        provider.setThemeMode(mode);
+        Navigator.pop(ctx);
+      },
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? (isDark ? const Color(0xFF0F2D2A) : const Color(0xFFE8F5F3))
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: isSelected ? const Color(0xFF1B413E) : Colors.transparent,
+            width: 1.2,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: iconColor, size: 22),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                      fontSize: 14,
+                      color: isDark ? Colors.white : const Color(0xFF0F172A),
+                    ),
+                  ),
+                  if (subtitle != null && subtitle.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            if (isSelected)
+              const Icon(Icons.check_circle_rounded, color: Color(0xFF1B413E), size: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _showNotificationsDialog(BuildContext context) {
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Row(
+        title: Row(
           children: [
-            Icon(Icons.notifications_active_rounded, color: Color(0xFFE05D38)),
-            SizedBox(width: 8),
-            Text('Notifications Pro'),
+            const Icon(Icons.notifications_active_rounded, color: Color(0xFFE05D38)),
+            const SizedBox(width: 8),
+            Text('pro_notif_title'.tr()),
           ],
         ),
         content: const Column(
@@ -1441,7 +1677,7 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Fermer', style: TextStyle(color: Color(0xFF0F2D2A))),
+            child: Text('pro_close'.tr(), style: const TextStyle(color: Color(0xFF0F2D2A))),
           ),
         ],
       ),
@@ -1449,14 +1685,19 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
   }
 
   void _showSettingsModal(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardBg = isDark ? const Color(0xFF1E293B) : Colors.white;
+    final iconColor = isDark ? const Color(0xFF10B981) : const Color(0xFF0F2D2A);
+    final textColor = isDark ? Colors.white : const Color(0xFF0F172A);
+
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       builder: (_) => Container(
         padding: const EdgeInsets.all(22),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
+        decoration: BoxDecoration(
+          color: cardBg,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(26)),
         ),
         child: SafeArea(
           top: false,
@@ -1468,23 +1709,57 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                 height: 4,
                 margin: const EdgeInsets.only(bottom: 16),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFE2DDD5),
+                  color: isDark ? const Color(0xFF334155) : const Color(0xFFE2DDD5),
                   borderRadius: BorderRadius.circular(10),
                 ),
               ),
               ListTile(
-                leading: const Icon(Icons.person_outline_rounded, color: Color(0xFF0F2D2A)),
-                title: const Text('Modifier mon profil professionnel'),
+                leading: Icon(Icons.person_outline_rounded, color: iconColor),
+                title: Text('pro_settings_edit_profile'.tr(), style: TextStyle(color: textColor)),
                 onTap: () => Navigator.pop(context),
               ),
               ListTile(
-                leading: const Icon(Icons.attach_money_rounded, color: Color(0xFF0F2D2A)),
-                title: const Text('Tarifs et spécialités'),
+                leading: Icon(Icons.attach_money_rounded, color: iconColor),
+                title: Text('pro_settings_rates'.tr(), style: TextStyle(color: textColor)),
                 onTap: () => Navigator.pop(context),
               ),
               ListTile(
-                leading: const Icon(Icons.lock_reset_rounded, color: Color(0xFF0F2D2A)),
-                title: const Text('Sécurité & Mot de passe'),
+                leading: Icon(Icons.language_rounded, color: iconColor),
+                title: Text('language'.tr(), style: TextStyle(color: textColor)),
+                trailing: Text(
+                  context.locale.languageCode == 'fr'
+                      ? 'Français 🇫🇷'
+                      : (context.locale.languageCode == 'en' ? 'English 🇬🇧' : 'العربية 🇹🇳'),
+                  style: const TextStyle(color: Color(0xFFE05D38), fontWeight: FontWeight.bold),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showLanguageDialog(context);
+                },
+              ),
+              ListTile(
+                leading: Icon(Icons.brightness_6_rounded, color: iconColor),
+                title: Text('theme_mode'.tr(), style: TextStyle(color: textColor)),
+                trailing: Builder(
+                  builder: (ctx) {
+                    final themeMode = Provider.of<ThemeProvider>(ctx).themeMode;
+                    final text = themeMode == ThemeMode.system
+                        ? 'theme_system'.tr()
+                        : (themeMode == ThemeMode.light ? 'theme_light'.tr() : 'theme_dark'.tr());
+                    return Text(
+                      text,
+                      style: const TextStyle(color: Color(0xFFE05D38), fontWeight: FontWeight.bold),
+                    );
+                  },
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showThemeDialog(context);
+                },
+              ),
+              ListTile(
+                leading: Icon(Icons.lock_reset_rounded, color: iconColor),
+                title: Text('security_and_password'.tr(), style: TextStyle(color: textColor)),
                 onTap: () {
                   Navigator.pop(context);
                   _showChangePasswordDialog();
@@ -1492,7 +1767,7 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
               ),
               ListTile(
                 leading: const Icon(Icons.logout_rounded, color: Colors.redAccent),
-                title: const Text('Se déconnecter', style: TextStyle(color: Colors.redAccent)),
+                title: Text('pro_logout'.tr(), style: const TextStyle(color: Colors.redAccent)),
                 onTap: () {
                   Navigator.pop(context);
                   Navigator.of(context).pushAndRemoveUntil(

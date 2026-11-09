@@ -501,8 +501,10 @@ class _HomeScreenState extends State<HomeScreen> {
                           child: Container(
                             width: 44,
                             height: 44,
+                            alignment: Alignment.center,
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
+                              color: Colors.white.withValues(alpha: 0.2),
                               border: Border.all(
                                 color: Colors.white.withValues(alpha: 0.3),
                                 width: 2,

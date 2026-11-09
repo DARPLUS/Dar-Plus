@@ -478,7 +478,7 @@ class _BookingCard extends StatelessWidget {
           ],
         ),
         content: Text(
-          'Voulez-vous vraiment annuler cette réservation ? Cette action est irréversible.',
+          context.tr('booking_cancel_warning'),
           style: TextStyle(
               fontSize: 14,
               color: AppTheme.subtitleColorOf(context)),

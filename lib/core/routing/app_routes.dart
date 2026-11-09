@@ -15,6 +15,7 @@ import '../../screens/payment_history_screen.dart';
 import '../../screens/bookings_screen.dart';
 import '../../screens/booking_detail_screen.dart';
 import '../../screens/urgency_screen.dart';
+import '../../screens/map_screen.dart';
 
 class AppRoutes {
   static const String splash = '/';
@@ -33,6 +34,7 @@ class AppRoutes {
   static const String bookings = '/bookings';
   static const String bookingDetail = '/booking-detail';
   static const String urgency = '/urgency';
+  static const String map = '/map';
 
   static Route<dynamic> onGenerateRoute(RouteSettings settings) {
     switch (settings.name) {
@@ -118,6 +120,9 @@ class AppRoutes {
 
       case urgency:
         return MaterialPageRoute(builder: (_) => const UrgencyScreen());
+
+      case map:
+        return MaterialPageRoute(builder: (_) => const MapScreen());
 
       case checkout:
         final args = settings.arguments as Map<String, dynamic>? ?? {};

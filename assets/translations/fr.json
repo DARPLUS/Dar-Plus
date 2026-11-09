@@ -392,5 +392,8 @@
   "edit_address_short": "Modifier",
   "location_web_only": "La géolocalisation est disponible uniquement sur navigateur.",
   "location_failed": "Géolocalisation échouée. Adresse du profil utilisée.",
-  "booking_cancel_warning": "Voulez-vous vraiment annuler cette réservation ? Cette action est irréversible."
+  "booking_cancel_warning": "Voulez-vous vraiment annuler cette réservation ? Cette action est irréversible.",
+  "map_title": "Carte des Professionnels",
+  "map_pros_found": "pros trouvés",
+  "map_you": "Vous"
 }

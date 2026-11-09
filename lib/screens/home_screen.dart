@@ -11,6 +11,7 @@ import '../providers/locale_provider.dart';
 import 'client_profile_screen.dart';
 import 'catalog_search_screen.dart';
 import 'urgency_screen.dart';
+import 'map_screen.dart';
 import 'service_detail_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -677,6 +678,13 @@ class _HomeScreenState extends State<HomeScreen> {
                               context,
                               MaterialPageRoute(
                                 builder: (_) => const UrgencyScreen(),
+                              ),
+                            );
+                          } else if (action['title'] == 'Carte') {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const MapScreen(),
                               ),
                             );
                           } else {

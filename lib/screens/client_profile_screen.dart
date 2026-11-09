@@ -11,6 +11,7 @@ import '../providers/theme_provider.dart';
 import '../providers/locale_provider.dart';
 import 'login_screen.dart';
 import 'home_screen.dart';
+import 'map_screen.dart';
 import 'payment_history_screen.dart';
 
 class ClientProfileScreen extends StatefulWidget {
@@ -834,7 +835,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                       iconBg: const Color(0xFFE0F2FE),
                       iconColor: const Color(0xFF0284C7),
                       title: 'pros_map'.tr(),
-                      onTap: () {},
+                      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MapScreen())),
                     ),
                   ]),
 

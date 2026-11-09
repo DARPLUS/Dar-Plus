@@ -192,6 +192,9 @@ class AppLocalizations {
       'edit_address_short': 'Modifier',
       'location_web_only': 'Géolocalisation disponible sur navigateur uniquement.',
       'location_failed': 'Géolocalisation échouée. Adresse du profil utilisée.',
+      'map_title': 'Carte des Professionnels',
+      'map_pros_found': 'pros trouvés',
+      'map_you': 'Vous',
     },
     'en': {
       // General & Brand
@@ -350,6 +353,9 @@ class AppLocalizations {
       'edit_address_short': 'Edit',
       'location_web_only': 'Geolocation is only available on browser.',
       'location_failed': 'Geolocation failed. Profile address used.',
+      'map_title': 'Map of Professionals',
+      'map_pros_found': 'pros found',
+      'map_you': 'You',
     },
     'ar': {
       // General & Brand
@@ -508,6 +514,9 @@ class AppLocalizations {
       'edit_address_short': 'تعديل',
       'location_web_only': 'تحديد الموقع متاح فقط عبر المتصفح.',
       'location_failed': 'فشل تحديد الموقع. تم استخدام عنوان الملف الشخصي.',
+      'map_title': 'خريطة الحرفيين',
+      'map_pros_found': 'حرفي تم العثور عليهم',
+      'map_you': 'أنت',
     },
   };
 

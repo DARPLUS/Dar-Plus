@@ -9,6 +9,10 @@ import '../../screens/admin_requests_screen.dart';
 import '../../screens/client_profile_screen.dart';
 import '../../screens/catalog_search_screen.dart';
 import '../../screens/service_detail_screen.dart';
+import '../../screens/checkout_screen.dart';
+import '../../screens/payment_status_screen.dart';
+import '../../screens/bookings_screen.dart';
+import '../../screens/booking_detail_screen.dart';
 
 class AppRoutes {
   static const String splash = '/';
@@ -21,6 +25,10 @@ class AppRoutes {
   static const String profile = '/profile';
   static const String catalog = '/catalog';
   static const String serviceDetail = '/service-detail';
+  static const String checkout = '/checkout';
+  static const String paymentStatus = '/payment-status';
+  static const String bookings = '/bookings';
+  static const String bookingDetail = '/booking-detail';
 
   static Route<dynamic> onGenerateRoute(RouteSettings settings) {
     switch (settings.name) {
@@ -93,6 +101,38 @@ class AppRoutes {
         final pro = settings.arguments as Map<String, dynamic>? ?? {};
         return MaterialPageRoute(
           builder: (_) => ServiceDetailScreen(proData: pro),
+        );
+
+      case bookings:
+        return MaterialPageRoute(builder: (_) => const BookingsScreen());
+
+      case bookingDetail:
+        final booking = settings.arguments as Map<String, dynamic>? ?? {};
+        return MaterialPageRoute(
+          builder: (_) => BookingDetailScreen(booking: booking),
+        );
+
+      case checkout:
+        final args = settings.arguments as Map<String, dynamic>? ?? {};
+        return MaterialPageRoute(
+          builder: (_) => CheckoutScreen(
+            bookingId: args['bookingId'] as String? ?? '',
+            proId: args['proId'] as String? ?? '',
+            proName: args['proName'] as String? ?? 'Artisan',
+            serviceType: args['serviceType'] as String? ?? 'Service',
+            baseAmount: (args['baseAmount'] as num?)?.toDouble() ?? 45.0,
+            address: args['address'] as String? ?? 'Tunis',
+            scheduledDate: args['scheduledDate'] as String?,
+          ),
+        );
+
+      case paymentStatus:
+        final args = settings.arguments as Map<String, dynamic>? ?? {};
+        return MaterialPageRoute(
+          builder: (_) => PaymentStatusScreen(
+            paymentId: args['paymentId'] as String? ?? '',
+            autoSimulateServerResponse: args['autoSimulate'] as bool? ?? false,
+          ),
         );
 
       default:

@@ -5,6 +5,7 @@ import '../providers/theme_provider.dart';
 import '../providers/locale_provider.dart';
 import '../core/localization/app_localizations.dart';
 import '../services/firebase_service.dart';
+import '../widgets/pro_avatar_widget.dart';
 
 class ServiceDetailScreen extends StatelessWidget {
   final Map<String, dynamic> proData;
@@ -86,13 +87,15 @@ class ServiceDetailScreen extends StatelessWidget {
                 children: [
                   Hero(
                     tag: 'pro_avatar_$proId',
-                    child: Image.asset(
-                      proData['avatarAsset'] ?? 'assets/images/slide_1_photo.png',
-                      fit: BoxFit.cover,
-                      alignment: Alignment.topCenter,
-                      errorBuilder: (context, error, stackTrace) => Container(
-                        color: const Color(0xFF0D544E),
-                        child: const Icon(Icons.person_rounded, size: 80, color: Colors.white),
+                    child: SizedBox(
+                      width: double.infinity,
+                      height: double.infinity,
+                      child: ProAvatarWidget(
+                        name: name,
+                        photoBase64: proData['photoBase64'] as String? ?? '',
+                        size: 280,
+                        borderRadius: 0,
+                        showVerifiedBadge: false,
                       ),
                     ),
                   ),
@@ -324,20 +327,60 @@ class ServiceDetailScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  _buildReviewCard(
-                    author: 'Inès Ben Amor',
-                    date: 'Il y a 3 jours',
-                    rating: 5.0,
-                    comment: 'Intervention impeccable et très ponctuel. Travail soigné et très propre ! Je recommande vivement.',
-                    isDark: isDark,
-                  ),
-                  const SizedBox(height: 10),
-                  _buildReviewCard(
-                    author: 'Tarek Chaabane',
-                    date: 'La semaine dernière',
-                    rating: 4.8,
-                    comment: 'Très bon artisan, diagnostic rapide et tarif conforme à ce qui était annoncé.',
-                    isDark: isDark,
+                  // Avis Clients réels depuis Firestore
+                  StreamBuilder<List<Map<String, dynamic>>>(
+                    stream: FirebaseService().streamReviews(proId),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator(color: Color(0xFF0D544E)));
+                      }
+                      final reviews = snapshot.data ?? [];
+                      if (reviews.isEmpty) {
+                        return Container(
+                          padding: const EdgeInsets.all(20),
+                          decoration: BoxDecoration(
+                            color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: isDark ? Colors.transparent : const Color(0xFFE2E8F0),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.rate_review_outlined, color: Colors.grey.shade400, size: 28),
+                              const SizedBox(width: 12),
+                              Text(
+                                'Aucun avis pour le moment',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+                      return Column(
+                        children: reviews.map((review) {
+                          final author = review['clientName'] as String? ?? 'Client';
+                          final date = review['dateLabel'] as String? ?? '';
+                          final rating = (review['rating'] is num)
+                              ? (review['rating'] as num).toDouble()
+                              : 5.0;
+                          final comment = review['comment'] as String? ?? '';
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: _buildReviewCard(
+                              author: author,
+                              date: date,
+                              rating: rating,
+                              comment: comment,
+                              isDark: isDark,
+                            ),
+                          );
+                        }).toList(),
+                      );
+                    },
                   ),
 
                   const SizedBox(height: 100), // Spacing for bottom button
@@ -493,10 +536,25 @@ class ServiceDetailScreen extends StatelessWidget {
       BuildContext context, String proName, String serviceType, String price) {
     final addressCtrl = TextEditingController();
     final descCtrl = TextEditingController();
-    String scheduledDate = 'Dès que possible';
+    // 0 = Dès que possible, 1 = Demain matin, 2 = Choisir une date
+    int selectedSlot = 0;
+    String customDate = '';
+    String customTime = '';
+    String? addressError;
     bool isSubmitting = false;
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final loc = AppLocalizations.of(context);
+
+    String buildScheduledDate() {
+      if (selectedSlot == 0) return loc.translate('slot_asap');
+      if (selectedSlot == 1) return loc.translate('slot_tomorrow_morning');
+      if (customDate.isNotEmpty && customTime.isNotEmpty) {
+        return '$customDate · $customTime';
+      }
+      if (customDate.isNotEmpty) return customDate;
+      return loc.translate('slot_choose_date');
+    }
 
     showModalBottomSheet(
       context: context,
@@ -515,157 +573,470 @@ class ServiceDetailScreen extends StatelessWidget {
                 right: 20,
                 bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
               ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Réserver $serviceType',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: isDark ? Colors.white : AppTheme.titleColor,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // ── En-tête ──────────────────────────────────────
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '${loc.translate("book_service")} — $serviceType',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: isDark ? Colors.white : AppTheme.titleColor,
+                                ),
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                '$proName  •  $price',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: isDark
+                                      ? const Color(0xFF94A3B8)
+                                      : AppTheme.subtitleColor,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.close_rounded),
-                        onPressed: isSubmitting ? null : () => Navigator.pop(ctx),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Artisan : $proName • Tarif : $price',
-                    style: const TextStyle(color: Colors.grey, fontSize: 13),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: addressCtrl,
-                    decoration: InputDecoration(
-                      labelText: 'Adresse d\'intervention',
-                      hintText: 'Ex: Rue Habib Bourguiba, La Marsa',
-                      prefixIcon: const Icon(Icons.home_work_rounded, color: Color(0xFF0D544E)),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                        IconButton(
+                          icon: const Icon(Icons.close_rounded),
+                          onPressed:
+                              isSubmitting ? null : () => Navigator.pop(ctx),
+                        ),
+                      ],
                     ),
-                  ),
-                  const SizedBox(height: 14),
-                  TextField(
-                    controller: descCtrl,
-                    maxLines: 2,
-                    decoration: InputDecoration(
-                      labelText: 'Description du besoin',
-                      hintText: 'Ex: Fuite sous évier cuisine à réparer...',
-                      prefixIcon: const Icon(Icons.description_rounded, color: Color(0xFF0D544E)),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+
+                    const SizedBox(height: 20),
+
+                    // ── Créneaux rapides ─────────────────────────────
+                    Text(
+                      loc.translate('booking_date'),
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: isDark ? Colors.white : AppTheme.titleColor,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 14),
-                  Row(
-                    children: [
-                      const Icon(Icons.event_rounded, color: Color(0xFF0D544E), size: 20),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Date : $scheduledDate',
-                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-                      ),
-                      const Spacer(),
-                      TextButton(
-                        onPressed: () async {
-                          final picked = await showDatePicker(
-                            context: modalContext,
-                            initialDate: DateTime.now(),
-                            firstDate: DateTime.now(),
-                            lastDate: DateTime.now().add(const Duration(days: 90)),
-                          );
-                          if (picked != null) {
-                            setModalState(() {
-                              scheduledDate = '${picked.day}/${picked.month}/${picked.year}';
-                            });
-                          }
-                        },
-                        child: const Text('Modifier', style: TextStyle(color: Color(0xFF0D544E))),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF0D544E),
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                      ),
-                      onPressed: isSubmitting
-                          ? null
-                          : () async {
-                              final address = addressCtrl.text.trim();
-                              if (address.isEmpty) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Veuillez renseigner une adresse'),
-                                    backgroundColor: Colors.orange,
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        _SlotChip(
+                          label: loc.translate('slot_asap'),
+                          icon: Icons.flash_on_rounded,
+                          isSelected: selectedSlot == 0,
+                          onTap: () =>
+                              setModalState(() => selectedSlot = 0),
+                        ),
+                        const SizedBox(width: 8),
+                        _SlotChip(
+                          label: loc.translate('slot_tomorrow_morning'),
+                          icon: Icons.wb_sunny_rounded,
+                          isSelected: selectedSlot == 1,
+                          onTap: () =>
+                              setModalState(() => selectedSlot = 1),
+                        ),
+                        const SizedBox(width: 8),
+                        _SlotChip(
+                          label: loc.translate('slot_choose_date'),
+                          icon: Icons.calendar_month_rounded,
+                          isSelected: selectedSlot == 2,
+                          onTap: () async {
+                            setModalState(() => selectedSlot = 2);
+                            final picked = await showDatePicker(
+                              context: modalContext,
+                              initialDate:
+                                  DateTime.now().add(const Duration(days: 1)),
+                              firstDate: DateTime.now(),
+                              lastDate: DateTime.now()
+                                  .add(const Duration(days: 90)),
+                              builder: (ctx, child) => Theme(
+                                data: Theme.of(ctx).copyWith(
+                                  colorScheme: const ColorScheme.light(
+                                    primary: Color(0xFF0D544E),
                                   ),
-                                );
-                                return;
-                              }
-
-                              setModalState(() {
-                                isSubmitting = true;
-                              });
-
-                              final proId = proData['id'] ?? proData['uid'] ?? 'pro_${proData['name']}';
-                              final proPhone = proData['phone'] ?? '';
-
-                              final res = await FirebaseService().createBooking(
-                                proId: proId.toString(),
-                                proName: proName,
-                                proPhone: proPhone.toString(),
-                                serviceType: serviceType,
-                                price: price,
-                                address: address,
-                                description: descCtrl.text.trim(),
-                                scheduledDate: scheduledDate,
-                              );
-
-                              if (!modalContext.mounted) return;
-                              Navigator.pop(ctx);
-
-                              final isSuccess = res['success'] == true;
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(
-                                    res['message']?.toString() ??
-                                        (isSuccess
-                                            ? 'Demande de réservation envoyée avec succès !'
-                                            : 'Erreur lors de la réservation'),
+                                ),
+                                child: child!,
+                              ),
+                            );
+                            if (picked != null && modalContext.mounted) {
+                              final days = [
+                                'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'
+                              ];
+                              final months = [
+                                'jan', 'fév', 'mar', 'avr', 'mai', 'jun',
+                                'jul', 'aoû', 'sep', 'oct', 'nov', 'déc'
+                              ];
+                              final d = '${days[picked.weekday - 1]} ${picked.day} ${months[picked.month - 1]}';
+                              final time = await showTimePicker(
+                                context: modalContext,
+                                initialTime: const TimeOfDay(hour: 9, minute: 0),
+                                builder: (ctx, child) => Theme(
+                                  data: Theme.of(ctx).copyWith(
+                                    colorScheme: const ColorScheme.light(
+                                      primary: Color(0xFF0D544E),
+                                    ),
                                   ),
-                                  backgroundColor: isSuccess ? const Color(0xFF10B981) : Colors.red,
+                                  child: child!,
                                 ),
                               );
-                            },
-                      child: isSubmitting
-                          ? const SizedBox(
-                              width: 22,
-                              height: 22,
-                              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
-                            )
-                          : const Text(
-                              'Confirmer la réservation',
-                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                            ),
+                              setModalState(() {
+                                customDate = d;
+                                customTime = time != null
+                                    ? '${time.hour.toString().padLeft(2, '0')}h${time.minute.toString().padLeft(2, '0')}'
+                                    : '';
+                              });
+                            }
+                          },
+                        ),
+                      ],
                     ),
-                  ),
-                ],
+
+                    // Affichage date sélectionnée
+                    if (selectedSlot == 2 && customDate.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0D544E).withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.event_available_rounded,
+                                size: 16, color: Color(0xFF0D544E)),
+                            const SizedBox(width: 6),
+                            Text(
+                              '$customDate${customTime.isNotEmpty ? " · $customTime" : ""}',
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF0D544E),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+
+                    const SizedBox(height: 16),
+
+                    // ── Adresse ──────────────────────────────────────
+                    TextField(
+                      controller: addressCtrl,
+                      onChanged: (_) {
+                        if (addressError != null) {
+                          setModalState(() => addressError = null);
+                        }
+                      },
+                      decoration: InputDecoration(
+                        labelText: loc.translate('intervention_address'),
+                        hintText: loc.translate('address_hint'),
+                        prefixIcon: const Icon(Icons.home_work_rounded,
+                            color: Color(0xFF0D544E)),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14)),
+                        errorText: addressError,
+                      ),
+                    ),
+
+                    const SizedBox(height: 14),
+
+                    // ── Description ──────────────────────────────────
+                    TextField(
+                      controller: descCtrl,
+                      maxLines: 2,
+                      decoration: InputDecoration(
+                        labelText: loc.translate('need_description'),
+                        hintText: loc.translate('description_hint'),
+                        prefixIcon: const Icon(Icons.description_rounded,
+                            color: Color(0xFF0D544E)),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14)),
+                      ),
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    // ── Bouton confirmer ─────────────────────────────
+                    SizedBox(
+                      width: double.infinity,
+                      height: 52,
+                      child: ElevatedButton.icon(
+                        icon: const Icon(Icons.check_circle_outline_rounded),
+                        label: isSubmitting
+                            ? const SizedBox(
+                                width: 22,
+                                height: 22,
+                                child: CircularProgressIndicator(
+                                    color: Colors.white, strokeWidth: 2.5),
+                              )
+                            : Text(
+                                loc.translate('confirm_booking'),
+                                style: const TextStyle(
+                                    fontSize: 16, fontWeight: FontWeight.bold),
+                              ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF0D544E),
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16)),
+                        ),
+                        onPressed: isSubmitting
+                            ? null
+                            : () async {
+                                final address = addressCtrl.text.trim();
+                                if (address.length < 10) {
+                                  setModalState(() => addressError =
+                                      loc.translate('address_too_short'));
+                                  return;
+                                }
+
+                                // ── Récapitulatif ────────────────────
+                                final scheduledDate = buildScheduledDate();
+                                final confirmed = await showDialog<bool>(
+                                  context: modalContext,
+                                  builder: (dCtx) => AlertDialog(
+                                    shape: RoundedRectangleBorder(
+                                        borderRadius:
+                                            BorderRadius.circular(20)),
+                                    title: Row(children: [
+                                      const Icon(
+                                          Icons.receipt_long_rounded,
+                                          color: Color(0xFF0D544E),
+                                          size: 22),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        loc.translate('booking_recap'),
+                                        style: const TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.bold),
+                                      ),
+                                    ]),
+                                    content: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        _RecapRow(
+                                            icon: Icons.person_rounded,
+                                            label: loc.translate('booking_pro'),
+                                            value: proName),
+                                        _RecapRow(
+                                            icon: Icons.build_rounded,
+                                            label: 'Service',
+                                            value: serviceType),
+                                        _RecapRow(
+                                            icon: Icons.schedule_rounded,
+                                            label: loc.translate('booking_date'),
+                                            value: scheduledDate),
+                                        _RecapRow(
+                                            icon: Icons.location_on_rounded,
+                                            label:
+                                                loc.translate('booking_address'),
+                                            value: address),
+                                        _RecapRow(
+                                            icon: Icons.payments_rounded,
+                                            label: 'Tarif',
+                                            value: price),
+                                      ],
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () =>
+                                            Navigator.pop(dCtx, false),
+                                        child: Text(
+                                          'Modifier',
+                                          style: TextStyle(
+                                              color: AppTheme.subtitleColorOf(
+                                                  context)),
+                                        ),
+                                      ),
+                                      ElevatedButton(
+                                        onPressed: () =>
+                                            Navigator.pop(dCtx, true),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor:
+                                              const Color(0xFF0D544E),
+                                          foregroundColor: Colors.white,
+                                          shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(12)),
+                                        ),
+                                        child: Text(
+                                            loc.translate('confirm')),
+                                      ),
+                                    ],
+                                  ),
+                                );
+
+                                if (confirmed != true) return;
+                                if (!modalContext.mounted) return;
+
+                                setModalState(() => isSubmitting = true);
+
+                                final proId = proData['id'] ??
+                                    proData['uid'] ??
+                                    'pro_${proData['name']}';
+                                final proPhone = proData['phone'] ?? '';
+
+                                final res =
+                                    await FirebaseService().createBooking(
+                                  proId: proId.toString(),
+                                  proName: proName,
+                                  proPhone: proPhone.toString(),
+                                  serviceType: serviceType,
+                                  price: price,
+                                  address: address,
+                                  description: descCtrl.text.trim(),
+                                  scheduledDate: scheduledDate,
+                                );
+
+                                if (!modalContext.mounted) return;
+                                Navigator.pop(ctx);
+
+                                final isSuccess = res['success'] == true;
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      res['message']?.toString() ??
+                                          (isSuccess
+                                              ? loc.translate(
+                                                  'booking_sent_success')
+                                              : loc.translate('error')),
+                                    ),
+                                    backgroundColor: isSuccess
+                                        ? const Color(0xFF10B981)
+                                        : const Color(0xFFDC2626),
+                                  ),
+                                );
+                              },
+                      ),
+                    ),
+                  ],
+                ),
               ),
             );
           },
         );
       },
+    );
+  }
+}
+
+// ── Widgets helpers pour le booking sheet ────────────────────────────────────
+
+class _SlotChip extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _SlotChip({
+    required this.label,
+    required this.icon,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? const Color(0xFF0D544E)
+                : (isDark ? const Color(0xFF1E293B) : Colors.white),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isSelected
+                  ? const Color(0xFF0D544E)
+                  : (isDark
+                      ? const Color(0xFF334155)
+                      : const Color(0xFFDDE3EA)),
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
+                size: 18,
+                color: isSelected
+                    ? Colors.white
+                    : const Color(0xFF0D544E),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                  color: isSelected
+                      ? Colors.white
+                      : (isDark
+                          ? const Color(0xFF94A3B8)
+                          : AppTheme.titleColor),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RecapRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  const _RecapRow(
+      {required this.icon, required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 16, color: const Color(0xFF0D544E)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label,
+                    style: TextStyle(
+                        fontSize: 11,
+                        color: AppTheme.subtitleColorOf(context))),
+                Text(value,
+                    style: const TextStyle(
+                        fontSize: 13, fontWeight: FontWeight.w600)),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

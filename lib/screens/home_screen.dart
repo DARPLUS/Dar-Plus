@@ -16,12 +16,14 @@ class HomeScreen extends StatefulWidget {
   final String userName;
   final String? userEmail;
   final String? userPhone;
+  final int initialTab;
 
   const HomeScreen({
     super.key,
     this.userName = 'Client',
     this.userEmail,
     this.userPhone,
+    this.initialTab = 0,
   });
 
   @override
@@ -52,6 +54,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    _currentBottomNavIndex = widget.initialTab;
     _loadProfilePhoto();
     _listenToCategories();
   }

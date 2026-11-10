@@ -49,6 +49,10 @@ dependencies:
   # Environment variables
   flutter_dotenv: ^5.2.1
 
+  # Geolocation
+  geolocator: ^13.0.2
+  geocoding: ^3.0.0
+
   # Localization & Internationalization
   flutter_localizations:
     sdk: flutter

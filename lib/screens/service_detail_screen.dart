@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:geolocator/geolocator.dart';
+import 'package:geocoding/geocoding.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 import '../theme/app_theme.dart';
 import 'package:provider/provider.dart';
 import '../providers/theme_provider.dart';
@@ -838,41 +842,113 @@ class _ServiceDetailScreenState extends State<ServiceDetailScreen> {
                                 onPressed: () async {
                                   setModalState(() => isLocating = true);
                                   try {
-                                    // Charger l'adresse depuis le profil
-                                    final userData = await FirebaseService()
-                                        .getCurrentUserData();
                                     String detected = '';
-                                    if (userData != null) {
-                                      final addr =
-                                          userData['address'] as String?;
-                                      final city =
-                                          userData['city'] as String?;
-                                      final phone =
-                                          userData['phone'] as String?;
-                                      if (addr != null && addr.isNotEmpty) {
-                                        detected = addr;
-                                      } else if (city != null &&
-                                          city.isNotEmpty) {
-                                        detected = city;
-                                      } else if (phone != null) {
-                                        detected = 'Tunis, Tunisie';
+
+                                    // ── Demande de permission ──────────────
+                                    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+                                    if (!serviceEnabled) {
+                                      if (modalContext.mounted) {
+                                        ScaffoldMessenger.of(modalContext).showSnackBar(
+                                          const SnackBar(
+                                            content: Text('Service de localisation désactivé.'),
+                                            backgroundColor: Color(0xFFD97706),
+                                          ),
+                                        );
                                       }
+                                      setModalState(() => isLocating = false);
+                                      return;
                                     }
-                                    // Web : tenter la géolocalisation navigateur
-                                    if (kIsWeb && detected.isEmpty) {
-                                      detected =
-                                          'Localisation détectée — veuillez préciser la rue';
+
+                                    LocationPermission permission = await Geolocator.checkPermission();
+                                    if (permission == LocationPermission.denied) {
+                                      permission = await Geolocator.requestPermission();
                                     }
+                                    if (permission == LocationPermission.deniedForever) {
+                                      if (modalContext.mounted) {
+                                        ScaffoldMessenger.of(modalContext).showSnackBar(
+                                          const SnackBar(
+                                            content: Text('Localisation refusée. Activez-la dans les paramètres.'),
+                                            backgroundColor: Color(0xFFDC2626),
+                                          ),
+                                        );
+                                      }
+                                      setModalState(() => isLocating = false);
+                                      return;
+                                    }
+
+                                    // ── Obtenir la position GPS ────────────
+                                    final pos = await Geolocator.getCurrentPosition(
+                                      locationSettings: const LocationSettings(
+                                        accuracy: LocationAccuracy.high,
+                                        timeLimit: Duration(seconds: 15),
+                                      ),
+                                    );
+
+                                    // ── Reverse geocoding ──────────────────
+                                    if (kIsWeb) {
+                                      // Web : Nominatim OpenStreetMap (pas de clé API)
+                                      try {
+                                        final uri = Uri.parse(
+                                          'https://nominatim.openstreetmap.org/reverse'
+                                          '?lat=${pos.latitude}&lon=${pos.longitude}'
+                                          '&format=json&accept-language=fr',
+                                        );
+                                        final resp = await http.get(uri, headers: {
+                                          'User-Agent': 'DarPlus/1.0 (contact@darplus.tn)',
+                                        });
+                                        if (resp.statusCode == 200) {
+                                          final data = jsonDecode(resp.body) as Map<String, dynamic>;
+                                          final address = data['address'] as Map<String, dynamic>?;
+                                          if (address != null) {
+                                            final parts = <String>[
+                                              if (address['road'] != null) address['road'] as String,
+                                              if (address['suburb'] != null) address['suburb'] as String,
+                                              if (address['city'] != null) address['city'] as String
+                                              else if (address['town'] != null) address['town'] as String
+                                              else if (address['village'] != null) address['village'] as String,
+                                            ].where((s) => s.isNotEmpty).toList();
+                                            detected = parts.join(', ');
+                                          }
+                                        }
+                                      } catch (_) {}
+                                    } else {
+                                      // Mobile : geocoding package (natif Android/iOS)
+                                      try {
+                                        final placemarks = await placemarkFromCoordinates(
+                                          pos.latitude, pos.longitude,
+                                        );
+                                        if (placemarks.isNotEmpty) {
+                                          final p = placemarks.first;
+                                          final parts = [
+                                            if (p.street != null && p.street!.isNotEmpty) p.street!,
+                                            if (p.subLocality != null && p.subLocality!.isNotEmpty) p.subLocality!,
+                                            if (p.locality != null && p.locality!.isNotEmpty) p.locality!,
+                                          ];
+                                          detected = parts.join(', ');
+                                        }
+                                      } catch (_) {}
+                                    }
+
+                                    // Fallback : coordonnées brutes
                                     if (detected.isEmpty) {
-                                      detected = 'Tunis, Tunisie';
+                                      detected = '${pos.latitude.toStringAsFixed(5)}, ${pos.longitude.toStringAsFixed(5)}';
                                     }
+
                                     setModalState(() {
                                       addressCtrl.text = detected;
                                       isLocating = false;
                                       addressError = null;
                                     });
-                                  } catch (_) {
+                                  } catch (e) {
                                     setModalState(() => isLocating = false);
+                                    if (modalContext.mounted) {
+                                      ScaffoldMessenger.of(modalContext).showSnackBar(
+                                        SnackBar(
+                                          content: Text('Impossible d\'obtenir la localisation : $e'),
+                                          backgroundColor: const Color(0xFFDC2626),
+                                        ),
+                                      );
+                                    }
                                   }
                                 },
                               ),

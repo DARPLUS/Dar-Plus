@@ -1560,33 +1560,13 @@ class FirebaseService {
   Future<Map<String, dynamic>> resetPassword(String email) async {
     final cleanEmail = email.trim().toLowerCase();
     try {
-      // Récupérer le nom de l'utilisateur depuis Firestore pour personnaliser l'email
-      String userName = cleanEmail.split('@').first;
       if (_isFirebaseInitialized) {
-        try {
-          final q = await FirebaseFirestore.instance
-              .collection('users')
-              .where('email', isEqualTo: cleanEmail)
-              .limit(1)
-              .get();
-          if (q.docs.isNotEmpty) {
-            final data = q.docs.first.data();
-            userName = (data['fullName'] as String?) ?? userName;
-          }
-        } catch (_) {}
-      }
-
-      if (_isFirebaseInitialized) {
-        // 1. Firebase envoie le vrai lien de réinitialisation sécurisé
+        // 1. Firebase Auth envoie l'email avec le lien sécurisé (en priorité)
         await FirebaseAuth.instance.sendPasswordResetEmail(email: cleanEmail);
 
-        // 2. EmailJS envoie l'email stylisé DAR PLUS de notification
-        try {
-          await EmailService.sendPasswordResetLinkNotification(
-            toEmail: cleanEmail,
-            userName: userName,
-          );
-        } catch (_) {}
+        // 2. Récupérer le nom (optionnel, ne bloque pas si Firestore échoue)
+        // Note: on ne requête plus Firestore avant le sendPasswordResetEmail
+        // pour éviter que permission-denied interrompe le flux
 
         return {
           'success': true,

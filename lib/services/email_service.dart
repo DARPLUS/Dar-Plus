@@ -302,7 +302,7 @@ class EmailService {
 <body>
   <div class="card">
     <div class="badge">DAR PLUS • Partenaire Professionnel</div>
-    <h2>Félicitations, $proName ! 🎉</h2>
+    <h2>Félicitations, $proName !</h2>
     <p>Nous avons le plaisir de vous informer que votre candidature en tant que professionnel sur <strong>DAR PLUS</strong> a été vérifiée et <strong>validée avec succès</strong>.</p>
 
     <div class="highlight">
@@ -312,7 +312,7 @@ class EmailService {
       </div>
       <div class="info-line" style="margin-top: 10px;">
         <span class="info-label">Statut du compte :</span>
-        <span class="info-val">Actif & Vérifié ✅</span>
+        <span class="info-val">Actif & Vérifié</span>
       </div>
     </div>
 

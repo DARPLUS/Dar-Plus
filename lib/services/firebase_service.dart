@@ -2073,7 +2073,7 @@ class FirebaseService {
       final user = FirebaseAuth.instance.currentUser;
       final clientId = user?.uid ?? 'client_anon';
       final clientEmail = user?.email ?? '';
-      
+
       // Récupérer le nom réel du client depuis Firestore ou le profil local
       String clientName = 'Client';
       String clientPhone = '';

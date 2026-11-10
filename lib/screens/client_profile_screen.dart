@@ -312,8 +312,12 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                         borderRadius: BorderRadius.circular(14),
                       ),
                     ),
-                    validator: (v) =>
-                        v == null || v.trim().isEmpty ? 'Téléphone requis' : null,
+                    validator: (v) {
+                      final digits = (v ?? '').replaceAll(RegExp(r'\D'), '');
+                      return digits.length < 8
+                          ? 'Veuillez saisir un numéro de téléphone valide'
+                          : null;
+                    },
                   ),
                 ],
               ),
@@ -702,12 +706,27 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                               ),
                             ),
                             const SizedBox(height: 2),
-                            Text(
-                              _currentPhone,
-                              style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.85),
-                                fontSize: 13,
-                              ),
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.phone_rounded,
+                                  size: 14,
+                                  color: Colors.white.withValues(alpha: 0.85),
+                                ),
+                                const SizedBox(width: 5),
+                                Flexible(
+                                  child: Text(
+                                    _currentPhone.isNotEmpty
+                                        ? _currentPhone
+                                        : 'Numéro non renseigné',
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      color: Colors.white.withValues(alpha: 0.85),
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ],
                         ),

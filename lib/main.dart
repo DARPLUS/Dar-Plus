@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 import 'theme/app_theme.dart';
 import 'services/firebase_service.dart';
@@ -13,6 +14,9 @@ import 'core/localization/app_localizations.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await EasyLocalization.ensureInitialized();
+
+  // Charger les variables d'environnement depuis .env
+  await dotenv.load(fileName: '.env');
 
   // Initialize Firebase (supports both active Firebase config and local fallback)
   await FirebaseService().init();

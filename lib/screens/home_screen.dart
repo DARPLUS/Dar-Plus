@@ -544,14 +544,21 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                             ),
                             const SizedBox(height: 2),
-                            Text(
-                              '${widget.userName} 👋',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 22,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: -0.2,
-                              ),
+                            Row(
+                              children: [
+                                Text(
+                                  widget.userName,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: -0.2,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                const Icon(Icons.waving_hand_rounded,
+                                    color: Color(0xFFFFD166), size: 20),
+                              ],
                             ),
                           ],
                         ),
@@ -819,7 +826,8 @@ class _HomeScreenState extends State<HomeScreen> {
                             color: const Color(0xFF818CF8).withValues(alpha: 0.15),
                             shape: BoxShape.circle,
                           ),
-                          child: const Text('🥈', style: TextStyle(fontSize: 14)),
+                          child: const Icon(Icons.workspace_premium_rounded,
+                              color: Color(0xFF818CF8), size: 18),
                         ),
                         const SizedBox(width: 10),
                         const Column(
@@ -934,7 +942,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   children: [
                     Row(
                       children: [
-                        const Text('🎉', style: TextStyle(fontSize: 13)),
+                        const Icon(Icons.celebration_rounded,
+                            color: Color(0xFFFFD166), size: 16),
                         const SizedBox(width: 6),
                         Text(
                           'Offre limitée',

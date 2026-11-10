@@ -113,9 +113,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     if (_accountType == AccountType.client) {
       // 1. Inscription CLIENT dans Firebase
-      final phone = _phoneController.text.trim().isNotEmpty
-          ? _phoneController.text.trim()
-          : '+216 50 000 000';
+      final phone = _phoneController.text.trim();
 
       final result = await firebaseService.registerClient(
         fullName: _fullNameController.text,
@@ -648,7 +646,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 _buildFieldLabel('Nom complet'),
                 _buildCustomTextField(
                   controller: _fullNameController,
-                  hintText: 'Yasmine Ouertani',
+                  hintText: 'Nom complet',
                   validator: (v) =>
                       v == null || v.trim().isEmpty ? 'Veuillez saisir votre nom complet' : null,
                 ),
@@ -659,11 +657,28 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 _buildFieldLabel('Adresse e-mail'),
                 _buildCustomTextField(
                   controller: _emailController,
-                  hintText: 'yasmine@exemple.com',
+                  hintText: 'Email',
                   keyboardType: TextInputType.emailAddress,
                   validator: (v) =>
                       v == null || !v.contains('@') ? 'Veuillez saisir une adresse e-mail valide' : null,
                 ),
+
+                if (_accountType == AccountType.client) ...[
+                  const SizedBox(height: 18),
+                  _buildFieldLabel('Numéro de téléphone'),
+                  _buildCustomTextField(
+                    controller: _phoneController,
+                    hintText: '+216',
+                    keyboardType: TextInputType.phone,
+                    validator: (v) {
+                      final digits = (v ?? '').replaceAll(RegExp(r'\D'), '');
+                      if (digits.length < 8) {
+                        return 'Veuillez saisir un numéro de téléphone valide';
+                      }
+                      return null;
+                    },
+                  ),
+                ],
 
                 // Si Professionnel : Spécialité et Téléphone pro
                 if (_accountType == AccountType.professionnel) ...[
@@ -713,7 +728,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   _buildFieldLabel('Numéro de téléphone'),
                   _buildCustomTextField(
                     controller: _phoneController,
-                    hintText: '+216 52 123 456',
+                    hintText: '+216',
                     keyboardType: TextInputType.phone,
                     validator: (v) =>
                         v == null || v.trim().isEmpty ? 'Numéro de téléphone requis' : null,
@@ -723,7 +738,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   _buildFieldLabel('Numéro CIN (Carte d\'Identité Nationale)'),
                   _buildCustomTextField(
                     controller: _cinController,
-                    hintText: 'Ex: 08123456 (8 chiffres)',
+                    hintText: '(8 chiffres)',
                     keyboardType: TextInputType.number,
                     validator: (v) {
                       if (_accountType == AccountType.professionnel) {

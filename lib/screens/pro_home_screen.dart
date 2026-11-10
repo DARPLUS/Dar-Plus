@@ -159,7 +159,7 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
     );
   }
 
-  // ─── 1. DARK HEADER ────────────────────────────────────────────────────────
+  // HEADER
   Widget _buildDarkHeader(BuildContext context) {
     return Container(
       padding: EdgeInsets.only(
@@ -244,22 +244,13 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                       ),
                     ),
                     const SizedBox(height: 2),
-                    Row(
-                      children: [
-                        Text(
-                          widget.proName,
-                          style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        const Text(
-                          '✌',
-                          style: TextStyle(fontSize: 18),
-                        ),
-                      ],
+                    Text(
+                      widget.proName,
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
                     ),
                   ],
                 ),
@@ -281,7 +272,7 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                         ),
                       ),
                       child: const Icon(
-                        Icons.notifications_rounded,
+                        Icons.notifications_none_rounded,
                         color: Color(0xFFFBBF24),
                         size: 20,
                       ),
@@ -316,7 +307,7 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                     ),
                   ),
                   child: const Icon(
-                    Icons.settings_rounded,
+                    Icons.settings_outlined,
                     color: Colors.white70,
                     size: 20,
                   ),
@@ -429,7 +420,7 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
             children: [
               Expanded(
                 child: _buildDarkStatCard(
-                  icon: Icons.savings_rounded,
+                  icon: Icons.account_balance_wallet_outlined,
                   iconColor: const Color(0xFFF59E0B),
                   value: '1690 TND',
                   label: 'Ce mois',
@@ -438,7 +429,7 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
               const SizedBox(width: 10),
               Expanded(
                 child: _buildDarkStatCard(
-                  icon: Icons.check_box_rounded,
+                  icon: Icons.event_available_outlined,
                   iconColor: const Color(0xFF10B981),
                   value: '3',
                   label: 'Aujourd\'hui',
@@ -447,7 +438,7 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
               const SizedBox(width: 10),
               Expanded(
                 child: _buildDarkStatCard(
-                  icon: Icons.star_rounded,
+                  icon: Icons.star_outline_rounded,
                   iconColor: const Color(0xFFF59E0B),
                   value: '4.9/5',
                   label: 'Note',
@@ -521,7 +512,7 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
         Expanded(
           child: _buildActionCard(
             context: context,
-            icon: Icons.calendar_month_rounded,
+            icon: Icons.calendar_month_outlined,
             iconColor: const Color(0xFF3B82F6),
             label: 'Dispo.',
             onTap: () {
@@ -558,7 +549,7 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
         Expanded(
           child: _buildActionCard(
             context: context,
-            icon: Icons.monetization_on_outlined,
+            icon: Icons.account_balance_wallet_outlined,
             iconColor: const Color(0xFFF59E0B),
             label: 'Revenus',
             onTap: () {
@@ -670,7 +661,7 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                 shape: BoxShape.circle,
               ),
               child: const Icon(
-                Icons.notifications_active_rounded,
+                Icons.notifications_none_rounded,
                 color: Color(0xFFEA580C),
                 size: 22,
               ),
@@ -720,10 +711,8 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
           children: [
             const Row(
               children: [
-                Text(
-                  '📅',
-                  style: TextStyle(fontSize: 16),
-                ),
+                Icon(Icons.calendar_month_outlined,
+                    color: Color(0xFFE05D38), size: 18),
                 SizedBox(width: 8),
                 Text(
                   'Interventions d\'aujourd\'hui',
@@ -816,10 +805,8 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                   const SizedBox(height: 4),
                   Row(
                     children: [
-                      const Text(
-                        '⏰',
-                        style: TextStyle(fontSize: 12),
-                      ),
+                      const Icon(Icons.schedule_outlined,
+                          color: Color(0xFF64748B), size: 14),
                       const SizedBox(width: 3),
                       Text(
                         item['time'],
@@ -835,10 +822,8 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                         style: TextStyle(color: Color(0xFF94A3B8)),
                       ),
                       const SizedBox(width: 6),
-                      const Text(
-                        '📍',
-                        style: TextStyle(fontSize: 12),
-                      ),
+                      const Icon(Icons.location_on_outlined,
+                          color: Color(0xFF64748B), size: 14),
                       const SizedBox(width: 3),
                       Expanded(
                         child: Text(
@@ -913,10 +898,8 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
         children: [
           const Row(
             children: [
-              Text(
-                '📊',
-                style: TextStyle(fontSize: 16),
-              ),
+              Icon(Icons.insights_rounded,
+                  color: Color(0xFFE05D38), size: 18),
               SizedBox(width: 8),
               Text(
                 'Performance cette semaine',
@@ -1068,7 +1051,7 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
             label: 'Messages',
           ),
           const BottomNavigationBarItem(
-            icon: Icon(Icons.attach_money_rounded),
+            icon: Icon(Icons.account_balance_wallet_outlined),
             label: 'Revenus',
           ),
           const BottomNavigationBarItem(
@@ -1167,7 +1150,7 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                     children: [
                       Row(
                         children: [
-                          const Icon(Icons.access_time_rounded,
+                          const Icon(Icons.schedule_outlined,
                               size: 18, color: Color(0xFF0F2D2A)),
                           const SizedBox(width: 8),
                           Text('Horaire prévu : Aujourd\'hui à ${item['time']}'),
@@ -1176,7 +1159,7 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                       const SizedBox(height: 8),
                       Row(
                         children: [
-                          const Icon(Icons.location_on_rounded,
+                          const Icon(Icons.location_on_outlined,
                               size: 18, color: Color(0xFFE05D38)),
                           const SizedBox(width: 8),
                           Text('Adresse : ${item['location']}'),

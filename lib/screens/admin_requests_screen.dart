@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
@@ -30,11 +30,10 @@ class AdminRequestsScreen extends StatefulWidget {
   State<AdminRequestsScreen> createState() => _AdminRequestsScreenState();
 }
 class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
-  // 0: Tableau, 1: Utilisateurs, 2: Validations, 3: Catégories, 4: Profil, 5: Supervision
-  int _currentBottomNavIndex = 0; // Redirige directement vers le Tableau de bord (Dashboard)
-  int _supervisionSubTab = 0; // 0: Signalements, 1: Journaux de sécurité
-  int _selectedValidationTab = 0; // 0: �? valider, 1: Validés, 2: Rejetés
-  // User management tab filters
+  int _currentBottomNavIndex = 0; 
+  int _supervisionSubTab = 0; 
+  int _selectedValidationTab = 0; 
+  // user management tab filters
   String _userRoleFilter = 'tous';
   final TextEditingController _userSearchController = TextEditingController();
   String _userSearchQuery = '';
@@ -55,7 +54,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
       widget.adminRole.toLowerCase() == 'super_admin';
 
   bool get canManageCategories => isSuperAdmin || _adminCanManageCategories;
-  // Categories list (8 catégories · 7 actives)
+  // categories list 
   final List<Map<String, dynamic>> _adminCategories = [
     {
       'id': 'cat_1',
@@ -68,7 +67,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
     },
     {
       'id': 'cat_2',
-      'name': '�?lectricité',
+      'name': 'Electricité',
       'pros': 41,
       'isActive': true,
       'icon': Icons.bolt_rounded,
@@ -1974,7 +1973,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
       },
     );
   }
-  // ================= TAB 0: DASHBOARD =================
+  //  TAB 0: DASHBOARD 
   Widget _buildDashboardTab(List<ProApplication> pendingList) {
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
@@ -2322,7 +2321,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
       ],
     );
   }
-  // ================= TAB 1: UTILISATEURS (FONCTIONNEL ET CONNECT�? FIREBASE) =================
+  //  TAB 1: UTILISATEURS (FONCTIONNEL ET CONNECT�? FIREBASE) 
   Widget _buildUsersTab() {
     return StreamBuilder<List<Map<String, dynamic>>>(
       stream: FirebaseService().streamUsers(),
@@ -2742,7 +2741,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
       ),
     );
   }
-  // ================= TAB 2: VALIDATIONS DES PROS (EXACT DESIGN MATCH TO SCREENSHOT) =================
+  //  validation des pros
   Widget _buildValidationsTab(List<ProApplication> allList) {
     final pendingList = allList.where((a) => a.status == 'en_attente').toList();
     final validatedList = allList.where((a) => a.status == 'valide').toList();
@@ -2774,7 +2773,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
             ],
           ),
         ),
-        // 2. Horizontal Filter Tabs: "�? valider (X)", "Validés", "Rejetés"
+        //  Filter Validés,Rejetés
         Container(
           width: double.infinity,
           decoration: const BoxDecoration(
@@ -3012,7 +3011,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
             ],
           ),
           const SizedBox(height: 14),
-          // 2. Documents row (Pièce d'identité, Certificat)
+          // documents 
           Row(
             children: [
               _buildDocumentPill(
@@ -3031,7 +3030,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
             ],
           ),
           const SizedBox(height: 16),
-          // 3. Action Buttons: "Rejeter" (red outlined) & "Valider" (dark teal filled)
+          // Rejeter  & Valider
           Row(
             children: [
               Expanded(
@@ -3118,7 +3117,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
       ),
     );
   }
-  // ================= TAB 3: CATÉGORIES (EXACT DESIGN MATCH TO LATEST SCREENSHOT) =================
+  //  catégories
   Widget _buildCategoriesTab() {
     final activeCount = _adminCategories.where((c) => c['isActive'] == true).length;
     final totalCount = _adminCategories.length;
@@ -3129,7 +3128,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 1. Top Bar: Menu Button + Title "Catégories"
+              // menu button + catégories
               Row(
                 children: [
     
@@ -3145,7 +3144,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                 ],
               ),
               const SizedBox(height: 6),
-              // 2. Subtitle: "8 catégories · 7 actives"
+              // subtitle: 
               Padding(
                 padding: const EdgeInsets.only(left: 4),
                 child: Text(
@@ -3158,7 +3157,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                 ),
               ),
               const SizedBox(height: 16),
-              // 3. Category Cards List
+              // category cards list
               Expanded(
                 child: ListView.builder(
                   padding: const EdgeInsets.only(bottom: 80),
@@ -3183,7 +3182,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                       ),
                       child: Row(
                         children: [
-                          // Squircle Icon container
+                          
                           Container(
                             width: 48,
                             height: 48,
@@ -3227,7 +3226,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                               ],
                             ),
                           ),
-                          // Badge compteur pros
+                          //  compteur 
                           if (isActive) ...[
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -3246,14 +3245,14 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                             ),
                             const SizedBox(width: 6),
                           ],
-                          // Pencil Edit button
+                          //  Edit button
                           IconButton(
                             icon: const Icon(Icons.edit_outlined,
                                 size: 20, color: Color(0xFF64748B)),
                             onPressed: () => _showEditCategoryDialog(cat),
                           ),
                           const SizedBox(width: 2),
-                          // Switch Toggle
+                          // toggle
                           Switch(
                             value: isActive,
                             activeTrackColor: const Color(0xFF0D544E),
@@ -3285,7 +3284,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
             ],
           ),
         ),
-        // 4. Floating Action Button: "+ Nouvelle catégorie" (Orange pill matching screenshot)
+        // boutton add catégorie
         Positioned(
           right: 20,
           bottom: 20,
@@ -3333,7 +3332,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
     }
     return parts[0].substring(0, parts[0].length >= 2 ? 2 : 1).toUpperCase();
   }
-  // ================= TAB 4: PROFIL ADMIN (MODIFIER PROFIL & LOGOUT) =================
+  // update profil admin
   Widget _buildAdminProfileTab() {
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
@@ -3341,7 +3340,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Top bar: Menu Hamburger + "Mon Profil Admin"
+          // menu hamburger + profil admin
           Row(
             children: [
               const Text(
@@ -3563,7 +3562,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
       ),
     );
   }
-  // ================= TAB 5: SUPERVISION =================
+  // supervision
   Widget _buildSupervisionTab() {
     return Padding(
       padding: const EdgeInsets.all(18),

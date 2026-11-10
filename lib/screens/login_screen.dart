@@ -364,7 +364,15 @@ class _LoginScreenState extends State<LoginScreen> {
       builder: (ctx) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
+            final isDlgDark = Theme.of(context).brightness == Brightness.dark;
+            final dlgBg       = isDlgDark ? const Color(0xFF1E293B) : Colors.white;
+            final dlgTitle    = isDlgDark ? Colors.white : const Color(0xFF0F172A);
+            final dlgSub      = isDlgDark ? const Color(0xFF94A3B8) : const Color(0xFF475569);
+            final inputBorder = isDlgDark ? const Color(0xFF334155) : const Color(0xFFDDE3EA);
+            final inputBg     = isDlgDark ? const Color(0xFF0F172A) : Colors.white;
+
             return AlertDialog(
+              backgroundColor: dlgBg,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(24),
               ),
@@ -378,49 +386,29 @@ class _LoginScreenState extends State<LoginScreen> {
                             width: 64,
                             height: 64,
                             decoration: BoxDecoration(
-                              color: const Color(0xFF10B981)
-                                  .withValues(alpha: 0.12),
+                              color: const Color(0xFF10B981).withValues(alpha: 0.12),
                               shape: BoxShape.circle,
                             ),
-                            child: const Icon(
-                              Icons.mark_email_read_rounded,
-                              color: Color(0xFF10B981),
-                              size: 34,
-                            ),
+                            child: const Icon(Icons.mark_email_read_rounded, color: Color(0xFF10B981), size: 34),
                           ),
                           const SizedBox(height: 18),
-                          const Text(
+                          Text(
                             'E-mail envoyé !',
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color: AppTheme.titleColor,
-                            ),
+                            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: dlgTitle),
                           ),
                           const SizedBox(height: 10),
                           RichText(
                             textAlign: TextAlign.center,
                             text: TextSpan(
-                              style: const TextStyle(
-                                fontSize: 13.5,
-                                color: Color(0xFF475569),
-                                height: 1.45,
-                              ),
+                              style: TextStyle(fontSize: 13.5, color: dlgSub, height: 1.45),
                               children: [
-                                const TextSpan(
-                                  text:
-                                      'Un lien de réinitialisation a été envoyé à :\n',
-                                ),
+                                const TextSpan(text: 'Un lien de réinitialisation a été envoyé à :\n'),
                                 TextSpan(
                                   text: '$sentEmail\n\n',
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: Color(0xFF0C5050),
-                                  ),
+                                  style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0C5050)),
                                 ),
                                 const TextSpan(
-                                  text:
-                                      'Ouvrez votre boîte mail, cliquez sur le lien et définissez votre nouveau mot de passe. Vérifiez aussi vos spams.',
+                                  text: 'Ouvrez votre boîte mail et cliquez sur le lien pour définir votre nouveau mot de passe. Vérifiez aussi vos spams.',
                                 ),
                               ],
                             ),
@@ -435,14 +423,9 @@ class _LoginScreenState extends State<LoginScreen> {
                                 backgroundColor: const Color(0xFF0C5050),
                                 foregroundColor: Colors.white,
                                 elevation: 0,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(14),
-                                ),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                               ),
-                              child: const Text(
-                                'Retour à la connexion',
-                                style: TextStyle(fontWeight: FontWeight.bold),
-                              ),
+                              child: const Text('Retour à la connexion', style: TextStyle(fontWeight: FontWeight.bold)),
                             ),
                           ),
                         ],
@@ -457,35 +440,29 @@ class _LoginScreenState extends State<LoginScreen> {
                                 width: 44,
                                 height: 44,
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFF0C5050)
-                                      .withValues(alpha: 0.12),
+                                  color: const Color(0xFF0C5050).withValues(alpha: 0.12),
                                   borderRadius: BorderRadius.circular(12),
                                 ),
-                                child: const Icon(
-                                  Icons.lock_reset_rounded,
-                                  color: Color(0xFF0C5050),
-                                  size: 24,
-                                ),
+                                child: const Icon(Icons.lock_reset_rounded, color: Color(0xFF0C5050), size: 24),
                               ),
                               const SizedBox(width: 12),
-                              const Expanded(
+                              Expanded(
                                 child: Text(
                                   'Mot de passe oublié',
-                                  style: TextStyle(
-                                    fontSize: 18,
+                                  style: TextStyle(fontSize: 18,
                                     fontWeight: FontWeight.bold,
-                                    color: AppTheme.titleColor,
+                                    color: dlgTitle,
                                   ),
                                 ),
                               ),
                             ],
                           ),
                           const SizedBox(height: 14),
-                          const Text(
+                          Text(
                             'Entrez l\'adresse e-mail associée à votre compte DAR PLUS. Nous vous enverrons un lien sécurisé pour réinitialiser votre mot de passe.',
                             style: TextStyle(
                               fontSize: 13,
-                              color: AppTheme.subtitleColor,
+                              color: dlgSub,
                               height: 1.45,
                             ),
                           ),
@@ -493,21 +470,21 @@ class _LoginScreenState extends State<LoginScreen> {
                           // Champ email
                           Container(
                             decoration: BoxDecoration(
-                              color: Colors.white,
+                              color: inputBg,
                               borderRadius: BorderRadius.circular(14),
                               border: Border.all(
                                 color: errorMessage != null
                                     ? Colors.redAccent
-                                    : const Color(0xFFDDE3EA),
+                                    : inputBorder,
                                 width: 1.2,
                               ),
                             ),
                             child: TextField(
                               controller: resetEmailController,
                               keyboardType: TextInputType.emailAddress,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 14.5,
-                                color: Color(0xFF0F172A),
+                                color: dlgTitle,
                               ),
                               onChanged: (_) {
                                 if (errorMessage != null) {

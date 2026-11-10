@@ -508,7 +508,7 @@ class EmailService {
       Nous avons reçu une demande de réinitialisation de mot de passe pour votre compte DAR PLUS associé à l'adresse <strong>$toEmail</strong>.
     </p>
     <p class="text">
-      Un email contenant un lien sécurisé de réinitialisation vous a été envoyé par notre système. Cliquez sur le bouton dans cet email pour définir un nouveau mot de passe.
+      Un email contenant un <strong>lien sécurisé</strong> de réinitialisation vous a été envoyé par notre système. Ouvrez cet email et cliquez sur le lien pour définir un nouveau mot de passe.
     </p>
     <div class="alert">
       ⚠️ Si vous n'avez pas demandé cette réinitialisation, ignorez simplement cet email. Votre mot de passe actuel reste inchangé.

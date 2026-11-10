@@ -46,6 +46,9 @@ dependencies:
   provider: ^6.1.2
   shared_preferences: 2.3.5
 
+  # Environment variables
+  flutter_dotenv: ^5.2.1
+
   # Localization & Internationalization
   flutter_localizations:
     sdk: flutter
@@ -75,6 +78,7 @@ flutter:
   uses-material-design: true
 
   assets:
+    - .env
     - assets/images/
     - assets/animations/
     - assets/translations/

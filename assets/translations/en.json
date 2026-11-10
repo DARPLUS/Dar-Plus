@@ -253,7 +253,7 @@
   "admin_create_account_desc": "Add a new administrator to manage the DAR PLUS platform.",
   "admin_institutional_email": "Institutional Email",
   "admin_password_auto_generated": "Password will be generated automatically and sent via email.",
-  "admin_create_and_send": "Create",
+  "admin_create_and_send": "Create & Send Access",
   "admin_created_success": "Admin created successfully!",
   "admin_account_activated": "The administrator account has been activated.",
   "admin_email_sent_to": "Email sent to:",
@@ -411,5 +411,8 @@
   "pro_req_accepted_snack": "Request accepted!",
   "pro_req_refused_snack": "Request declined.",
   "pro_req_done_snack": "Service marked as completed.",
-  "pro_req_empty": "No requests at the moment."
+  "pro_req_empty": "No requests at the moment.",
+  "notifications": "Notifications",
+  "no_notifications": "No new notifications",
+  "mark_all_read": "Mark all as read"
 }

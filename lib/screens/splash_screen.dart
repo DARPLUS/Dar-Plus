@@ -1,8 +1,14 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:lottie/lottie.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../theme/app_theme.dart';
+import '../services/firebase_service.dart';
 import 'onboarding_screen.dart';
+import 'home_screen.dart';
+import 'pro_home_screen.dart';
+import 'admin_requests_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -33,8 +39,53 @@ class _SplashScreenState extends State<SplashScreen>
 
     _fadeController.forward();
 
-    // 4 seconds splash duration as requested
-    _timer = Timer(const Duration(seconds: 4), () {
+    // Vérifier si un utilisateur est déjà connecté (session persistante ou redirect Google)
+    _timer = Timer(const Duration(milliseconds: 500), () async {
+      if (!mounted) return;
+
+      // 1. Sur Web : vérifier d'abord un résultat de redirect Google en attente
+      if (kIsWeb) {
+        try {
+          final redirectResult = await FirebaseAuth.instance.getRedirectResult();
+          if (redirectResult.user != null && mounted) {
+            final result = await FirebaseService().signInWithGoogle();
+            if (result['success'] == true && mounted) {
+              _navigateByRole(result);
+              return;
+            }
+          }
+        } catch (_) {}
+      }
+
+      // 2. Vérifier si un utilisateur est déjà connecté (session persistante)
+      final currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser != null && mounted) {
+        try {
+          final data = await FirebaseService().getCurrentUserData();
+          if (data != null && mounted) {
+            final role = (data['role'] as String?)?.toLowerCase() ?? 'client';
+            final fullName = data['fullName'] as String? ?? 'Utilisateur';
+            final email = data['email'] as String? ?? currentUser.email ?? '';
+            final phone = data['phone'] as String? ?? '';
+            final serviceType = data['serviceType'] as String? ?? 'Plomberie';
+            final mustChange = data['mustChangePassword'] == true;
+
+            _navigateByRole({
+              'success': true,
+              'role': role,
+              'fullName': fullName,
+              'email': email,
+              'phone': phone,
+              'serviceType': serviceType,
+              'mustChangePassword': mustChange,
+            });
+            return;
+          }
+        } catch (_) {}
+      }
+
+      // 3. Pas de session → aller vers Onboarding après 4 secondes
+      await Future.delayed(const Duration(seconds: 3));
       if (mounted) {
         Navigator.of(context).pushReplacement(
           PageRouteBuilder(
@@ -54,6 +105,40 @@ class _SplashScreenState extends State<SplashScreen>
     _timer?.cancel();
     _fadeController.dispose();
     super.dispose();
+  }
+
+  void _navigateByRole(Map<String, dynamic> result) {
+    if (!mounted) return;
+    final role = (result['role'] as String?)?.toLowerCase() ?? 'client';
+    final fullName = result['fullName'] as String? ?? 'Utilisateur';
+    final email = result['email'] as String? ?? '';
+    final phone = result['phone'] as String? ?? '';
+    final serviceType = result['serviceType'] as String? ?? 'Plomberie';
+    final mustChange = result['mustChangePassword'] == true;
+
+    Widget screen;
+    if (role == 'admin' || role == 'super_admin') {
+      screen = AdminRequestsScreen(
+        adminName: fullName,
+        adminEmail: email,
+        adminPhone: phone,
+        adminRole: role,
+        mustChangePassword: mustChange,
+      );
+    } else if (role == 'professionnel') {
+      screen = ProHomeScreen(proName: fullName, serviceType: serviceType);
+    } else {
+      screen = HomeScreen(userName: fullName, userEmail: email, userPhone: phone);
+    }
+
+    Navigator.of(context).pushReplacement(
+      PageRouteBuilder(
+        transitionDuration: const Duration(milliseconds: 400),
+        pageBuilder: (_, _, _) => screen,
+        transitionsBuilder: (_, animation, _, child) =>
+            FadeTransition(opacity: animation, child: child),
+      ),
+    );
   }
 
   @override

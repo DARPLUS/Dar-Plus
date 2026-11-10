@@ -253,7 +253,7 @@
   "admin_create_account_desc": "إضافة مشرف جديد لإدارة منصة دار بلس.",
   "admin_institutional_email": "البريد المهني الرسمي",
   "admin_password_auto_generated": "سيتم إنشاء كلمة المرور تلقائياً وإرسالها عبر البريد.",
-  "admin_create_and_send": "إنشاء",
+  "admin_create_and_send": "إنشاء وإرسال بيانات الدخول",
   "admin_created_success": "تم إنشاء المشرف بنجاح!",
   "admin_account_activated": "تم تفعيل حساب المشرف.",
   "admin_email_sent_to": "تم إرسال البريد إلى:",
@@ -411,5 +411,8 @@
   "pro_req_accepted_snack": "تم قبول الطلب!",
   "pro_req_refused_snack": "تم رفض الطلب.",
   "pro_req_done_snack": "تم تحديد الخدمة كمكتملة.",
-  "pro_req_empty": "لا توجد طلبات حالياً."
+  "pro_req_empty": "لا توجد طلبات حالياً.",
+  "notifications": "الإشعارات",
+  "no_notifications": "لا توجد إشعارات جديدة",
+  "mark_all_read": "تحديد الكل كمقروء"
 }

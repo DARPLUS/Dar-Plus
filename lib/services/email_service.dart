@@ -1,26 +1,20 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 /// Service d'envoi d'emails via EmailJS REST API.
 ///
 /// EmailJS autorise les appels CORS depuis Flutter Web — aucun proxy nécessaire.
 /// Le template HTML complet est généré côté Dart et envoyé comme variable.
 ///
-/// ─── CONFIGURATION (à remplir une seule fois) ────────────────────────────
-/// 1. Créez un compte gratuit sur https://emailjs.com
-/// 2. Email Services → Add New Service → choisissez Gmail → connectez votre compte
-///    → notez le SERVICE ID (ex: service_abc123)
-/// 3. Email Templates → Create New Template → dans le body HTML mettez juste :
-///       {{{html_body}}}
-///    et dans Subject : {{subject}}
-///    → notez le TEMPLATE ID (ex: template_xyz789)
-/// 4. Account → General → API Keys → copiez la PUBLIC KEY
+/// ─── CONFIGURATION ────────────────────────────────────────────────────────
+/// Les clés sont lues depuis le fichier .env (voir .env.example à la racine).
 /// ─────────────────────────────────────────────────────────────────────────
 class EmailService {
-  static const String _serviceId  = 'service_zg0xu1t';   // Votre Service ID SMTP
-  static const String _templateId = 'template_ppiwd7b';  // Votre Template ID
-  static const String _publicKey  = '8HgQH6Ou_rETVjTLu';   // Votre Public Key EmailJS
+  static String get _serviceId  => dotenv.env['EMAILJS_SERVICE_ID']  ?? 'service_zg0xu1t';
+  static String get _templateId => dotenv.env['EMAILJS_TEMPLATE_ID'] ?? 'template_ppiwd7b';
+  static String get _publicKey  => dotenv.env['EMAILJS_PUBLIC_KEY']  ?? '8HgQH6Ou_rETVjTLu';
 
   /// Envoie un email de bienvenue à un nouvel administrateur.
   /// Le beau template HTML est entièrement généré ici, dans le code Dart.

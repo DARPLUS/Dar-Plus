@@ -58,22 +58,30 @@ class _SplashScreenState extends State<SplashScreen>
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
       body: Stack(
         children: [
           // Background subtle ambient radial gradient
           Positioned.fill(
             child: Container(
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 gradient: RadialGradient(
-                  center: Alignment(0, -0.1),
+                  center: const Alignment(0, -0.1),
                   radius: 0.95,
-                  colors: [
-                    Colors.white,
-                    Color(0xFFF7FAF9),
-                    Color(0xFFEAF4F3),
-                  ],
+                  colors: isDark
+                      ? [
+                          const Color(0xFF0F172A),
+                          const Color(0xFF0F172A),
+                          const Color(0xFF1E293B),
+                        ]
+                      : [
+                          Colors.white,
+                          const Color(0xFFF7FAF9),
+                          const Color(0xFFEAF4F3),
+                        ],
                 ),
               ),
             ),

@@ -1,8 +1,12 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:easy_localization/easy_localization.dart';
+import 'package:provider/provider.dart';
+import '../providers/theme_provider.dart';
+import '../providers/locale_provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart';
 import '../theme/app_theme.dart';
@@ -30,10 +34,11 @@ class AdminRequestsScreen extends StatefulWidget {
   State<AdminRequestsScreen> createState() => _AdminRequestsScreenState();
 }
 class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
-  int _currentBottomNavIndex = 0; 
-  int _supervisionSubTab = 0; 
-  int _selectedValidationTab = 0; 
-  // user management tab filters
+  // 0: Tableau, 1: Utilisateurs, 2: Validations, 3: Catégories, 4: Profil, 5: Supervision
+  int _currentBottomNavIndex = 0; // Redirige directement vers le Tableau de bord (Dashboard)
+  int _supervisionSubTab = 0; // 0: Signalements, 1: Journaux de sécurité
+  int _selectedValidationTab = 0; // 0: �? valider, 1: Validés, 2: Rejetés
+  // User management tab filters
   String _userRoleFilter = 'tous';
   final TextEditingController _userSearchController = TextEditingController();
   String _userSearchQuery = '';
@@ -54,7 +59,13 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
       widget.adminRole.toLowerCase() == 'super_admin';
 
   bool get canManageCategories => isSuperAdmin || _adminCanManageCategories;
-  // categories list 
+
+  bool get _isDark => Theme.of(context).brightness == Brightness.dark;
+  Color get _cardBg => _isDark ? const Color(0xFF1E293B) : Colors.white;
+  Color get _borderColor => _isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
+  Color get _textPrimary => _isDark ? Colors.white : const Color(0xFF0F172A);
+  Color get _textSecondary => _isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+  // Categories list (8 catégories · 7 actives)
   final List<Map<String, dynamic>> _adminCategories = [
     {
       'id': 'cat_1',
@@ -67,7 +78,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
     },
     {
       'id': 'cat_2',
-      'name': 'Electricité',
+      'name': '�?lectricité',
       'pros': 41,
       'isActive': true,
       'icon': Icons.bolt_rounded,
@@ -214,11 +225,11 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
           canPop: false,
           child: AlertDialog(
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-            title: const Row(
+            title: Row(
               children: [
                 Icon(Icons.lock_reset_rounded, color: Color(0xFFD97706), size: 28),
                 SizedBox(width: 10),
-                Expanded(child: Text('Changement de mot de passe obligatoire', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold))),
+                Expanded(child: Text('admin_force_change_password_title'.tr(), style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold))),
               ],
             ),
             content: Form(
@@ -226,7 +237,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text(
+                  Text(
                     'Pour des raisons de securite, vous devez changer votre mot de passe temporaire avant de continuer.',
                     style: TextStyle(fontSize: 13, color: Color(0xFF64748B)),
                   ),
@@ -235,7 +246,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                     controller: newPassCtrl,
                     obscureText: true,
                     decoration: InputDecoration(
-                      labelText: 'Nouveau mot de passe',
+                      labelText: 'admin_new_password'.tr(),
                       prefixIcon: const Icon(Icons.lock_rounded),
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
                     ),
@@ -249,7 +260,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                     controller: confirmPassCtrl,
                     obscureText: true,
                     decoration: InputDecoration(
-                      labelText: 'Confirmer le mot de passe',
+                      labelText: 'admin_confirm_password'.tr(),
                       prefixIcon: const Icon(Icons.lock_outline_rounded),
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
                     ),
@@ -277,7 +288,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                           if (ctx.mounted) Navigator.pop(ctx);
                           if (mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
+                              SnackBar(
                                 content: Text('Mot de passe mis a jour avec succes !'),
                                 backgroundColor: Color(0xFF10B981),
                               ),
@@ -299,7 +310,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                 ),
                 child: isChanging
                     ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                    : const Text('Changer le mot de passe'),
+                    : Text('admin_change_password'.tr()),
               ),
             ],
           ),
@@ -310,7 +321,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
   void _showAddCategoryDialog() {
     if (!canManageCategories) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text('Seul le Super Admin (ou admin autorisé via paramètres globaux) peut ajouter des catégories.'),
           backgroundColor: Colors.redAccent,
         ),
@@ -326,11 +337,11 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-          title: const Row(
+          title: Row(
             children: [
               Icon(Icons.add_circle_rounded, color: Color(0xFFF5A623), size: 26),
               SizedBox(width: 10),
-              Text('Nouvelle catégorie', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+              Text('admin_new_category_title'.tr(), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
             ],
           ),
           content: Form(
@@ -341,18 +352,18 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                 TextFormField(
                   controller: nameCtrl,
                   decoration: InputDecoration(
-                    labelText: 'Nom de la catégorie (ex: Menuiserie)',
+                    labelText: 'admin_category_name_hint'.tr(),
                     prefixIcon: const Icon(Icons.category_outlined),
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
                   ),
-                  validator: (v) => v == null || v.trim().isEmpty ? 'Nom requis' : null,
+                  validator: (v) => v == null || v.trim().isEmpty ? 'admin_name_required'.tr() : null,
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
                   controller: prosCtrl,
                   keyboardType: TextInputType.number,
                   decoration: InputDecoration(
-                    labelText: 'Nombre initial de professionnels',
+                    labelText: 'admin_initial_pros_count'.tr(),
                     prefixIcon: const Icon(Icons.people_outline_rounded),
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
                   ),
@@ -363,7 +374,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
           actions: [
             TextButton(
               onPressed: isSaving ? null : () => Navigator.pop(ctx),
-              child: const Text('Annuler'),
+              child: Text('cancel'.tr()),
             ),
             ElevatedButton(
               onPressed: isSaving
@@ -404,7 +415,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                       height: 18,
                       child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
                     )
-                  : const Text('Ajouter', style: TextStyle(fontWeight: FontWeight.bold)),
+                  : Text('Ajouter', style: TextStyle(fontWeight: FontWeight.bold)),
             ),
           ],
         ),
@@ -414,7 +425,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
   void _showEditCategoryDialog(Map<String, dynamic> cat) {
     if (!canManageCategories) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text('Action réservée au Super Admin ou admin autorisé.'),
           backgroundColor: Colors.redAccent,
         ),
@@ -454,7 +465,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                     labelText: 'Nom du métier',
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
                   ),
-                  validator: (v) => v == null || v.trim().isEmpty ? 'Nom requis' : null,
+                  validator: (v) => v == null || v.trim().isEmpty ? 'admin_name_required'.tr() : null,
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
@@ -476,13 +487,13 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                       final confirm = await showDialog<bool>(
                         context: context,
                         builder: (cctx) => AlertDialog(
-                          title: const Text('Confirmer la suppression'),
+                          title: Text('Confirmer la suppression'),
                           content: Text('Voulez-vous vraiment supprimer "${cat['name']}" ?'),
                           actions: [
-                            TextButton(onPressed: () => Navigator.pop(cctx, false), child: const Text('Annuler')),
+                            TextButton(onPressed: () => Navigator.pop(cctx, false), child: Text('cancel'.tr())),
                             TextButton(
                               onPressed: () => Navigator.pop(cctx, true),
-                              child: const Text('Supprimer', style: TextStyle(color: Colors.red)),
+                              child: Text('Supprimer', style: TextStyle(color: Colors.red)),
                             ),
                           ],
                         ),
@@ -502,7 +513,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                         );
                       }
                     },
-              child: const Text('Supprimer', style: TextStyle(color: Color(0xFFDC2626))),
+              child: Text('Supprimer', style: TextStyle(color: Color(0xFFDC2626))),
             ),
             ElevatedButton(
               onPressed: isSaving
@@ -540,7 +551,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                       height: 18,
                       child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                     )
-                  : const Text('Enregistrer'),
+                  : Text('Enregistrer'),
             ),
           ],
         ),
@@ -565,7 +576,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
         );
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Photo Administrateur mise à jour !'), backgroundColor: Color(0xFF10B981)),
+            SnackBar(content: Text('admin_photo_updated'.tr()), backgroundColor: Color(0xFF10B981)),
           );
         }
       }
@@ -580,7 +591,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
   void _showAdminPhotoPickerSheet() {
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.white,
+      backgroundColor: _cardBg,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (ctx) => SafeArea(
         child: Padding(
@@ -588,29 +599,35 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2))),
+              Container(width: 40, height: 4, decoration: BoxDecoration(color: _isDark ? const Color(0xFF334155) : Colors.grey.shade300, borderRadius: BorderRadius.circular(2))),
               const SizedBox(height: 18),
-              const Text('Photo de profil Admin', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
+              Text('admin_profile_photo'.tr(), style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: _textPrimary)),
               const SizedBox(height: 18),
               ListTile(
                 leading: Container(
                   width: 44, height: 44,
-                  decoration: BoxDecoration(color: const Color(0xFFE0F2FE), borderRadius: BorderRadius.circular(12)),
+                  decoration: BoxDecoration(
+                    color: _isDark ? const Color(0xFF0284C7).withValues(alpha: 0.2) : const Color(0xFFE0F2FE),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                   child: const Icon(Icons.photo_library_rounded, color: Color(0xFF0284C7)),
                 ),
-                title: const Text('Choisir depuis la galerie', style: TextStyle(fontWeight: FontWeight.w600)),
-                subtitle: const Text('Importer une photo', style: TextStyle(fontSize: 12, color: Color(0xFF64748B))),
+                title: Text('admin_choose_gallery'.tr(), style: TextStyle(fontWeight: FontWeight.w600, color: _textPrimary)),
+                subtitle: Text('admin_import_photo'.tr(), style: TextStyle(fontSize: 12, color: _textSecondary)),
                 onTap: () { Navigator.pop(ctx); _pickAdminImage(ImageSource.gallery); },
               ),
               const SizedBox(height: 6),
               ListTile(
                 leading: Container(
                   width: 44, height: 44,
-                  decoration: BoxDecoration(color: const Color(0xFFD7F3EA), borderRadius: BorderRadius.circular(12)),
+                  decoration: BoxDecoration(
+                    color: _isDark ? const Color(0xFF0D544E).withValues(alpha: 0.25) : const Color(0xFFD7F3EA),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                   child: const Icon(Icons.camera_alt_rounded, color: Color(0xFF0D544E)),
                 ),
-                title: const Text('Prendre une photo', style: TextStyle(fontWeight: FontWeight.w600)),
-                subtitle: const Text('Utiliser l\'appareil photo', style: TextStyle(fontSize: 12, color: Color(0xFF64748B))),
+                title: Text('admin_take_photo'.tr(), style: TextStyle(fontWeight: FontWeight.w600, color: _textPrimary)),
+                subtitle: Text('admin_use_camera'.tr(), style: TextStyle(fontSize: 12, color: _textSecondary)),
                 onTap: () { Navigator.pop(ctx); _pickAdminImage(ImageSource.camera); },
               ),
               if (_adminPhotoBase64 != null && _adminPhotoBase64!.isNotEmpty) ...[
@@ -621,7 +638,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                     decoration: BoxDecoration(color: const Color(0xFFFEE2E2), borderRadius: BorderRadius.circular(12)),
                     child: const Icon(Icons.delete_outline_rounded, color: Color(0xFFDC2626)),
                   ),
-                  title: const Text('Supprimer la photo', style: TextStyle(fontWeight: FontWeight.w600, color: Color(0xFFDC2626))),
+                  title: Text('admin_delete_photo'.tr(), style: TextStyle(fontWeight: FontWeight.w600, color: Color(0xFFDC2626))),
                   onTap: () async {
                     Navigator.pop(ctx);
                     setState(() { _adminPhotoBase64 = null; });
@@ -658,11 +675,11 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-          title: const Row(
+          title: Row(
             children: [
               Icon(Icons.lock_reset_rounded, color: Color(0xFFD97706)),
               SizedBox(width: 8),
-              Text('Changer le mot de passe', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              Text('admin_change_password'.tr(), style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
             ],
           ),
           content: SingleChildScrollView(
@@ -675,7 +692,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                     controller: currentPassCtrl,
                     obscureText: obscureCurrent,
                     decoration: InputDecoration(
-                      labelText: 'Mot de passe actuel',
+                      labelText: 'admin_current_password'.tr(),
                       prefixIcon: const Icon(Icons.lock_outline_rounded, size: 20),
                       suffixIcon: IconButton(
                         icon: Icon(obscureCurrent ? Icons.visibility_off : Icons.visibility, size: 20),
@@ -690,7 +707,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                     controller: newPassCtrl,
                     obscureText: obscureNew,
                     decoration: InputDecoration(
-                      labelText: 'Nouveau mot de passe',
+                      labelText: 'admin_new_password'.tr(),
                       prefixIcon: const Icon(Icons.key_rounded, size: 20),
                       suffixIcon: IconButton(
                         icon: Icon(obscureNew ? Icons.visibility_off : Icons.visibility, size: 20),
@@ -709,7 +726,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                     controller: confirmPassCtrl,
                     obscureText: obscureConfirm,
                     decoration: InputDecoration(
-                      labelText: 'Confirmer le mot de passe',
+                      labelText: 'admin_confirm_password'.tr(),
                       prefixIcon: const Icon(Icons.key_rounded, size: 20),
                       suffixIcon: IconButton(
                         icon: Icon(obscureConfirm ? Icons.visibility_off : Icons.visibility, size: 20),
@@ -746,7 +763,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
           actions: [
             TextButton(
               onPressed: isSaving ? null : () => Navigator.pop(ctx),
-              child: const Text('Annuler', style: TextStyle(color: Color(0xFF64748B))),
+              child: Text('cancel'.tr(), style: const TextStyle(color: Color(0xFF64748B))),
             ),
             ElevatedButton(
               onPressed: isSaving
@@ -767,7 +784,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                       if (result['success'] == true) {
                         if (ctx.mounted) Navigator.pop(ctx);
                         messenger.showSnackBar(
-                          const SnackBar(
+                          SnackBar(
                             content: Text('Mot de passe mis à jour avec succès !'),
                             backgroundColor: Color(0xFF10B981),
                           ),
@@ -786,7 +803,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
               ),
               child: isSaving
                   ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                  : const Text('Mettre à jour'),
+                  : Text('Mettre à jour'),
             ),
           ],
         ),
@@ -804,18 +821,20 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setDialogState) {
+          final dlgDark = Theme.of(context).brightness == Brightness.dark;
           return AlertDialog(
+            backgroundColor: dlgDark ? const Color(0xFF1E293B) : Colors.white,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-            title: const Row(
+            title: Row(
               children: [
-                Icon(Icons.manage_accounts_rounded, color: Color(0xFF0D544E), size: 26),
-                SizedBox(width: 10),
+                const Icon(Icons.manage_accounts_rounded, color: Color(0xFF0D544E), size: 26),
+                const SizedBox(width: 10),
                 Text(
-                  'Modifier mon profil Admin',
+                  'admin_edit_my_profile'.tr(),
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
-                    color: AppTheme.titleColor,
+                    color: dlgDark ? Colors.white : AppTheme.titleColor,
                   ),
                 ),
               ],
@@ -826,41 +845,41 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Text(
-                      'Modifiez vos informations administratives.',
+                    Text(
+                      'admin_edit_info_desc'.tr(),
                       style: TextStyle(fontSize: 12.5, color: Color(0xFF64748B)),
                     ),
                     const SizedBox(height: 16),
                     TextFormField(
                       controller: nameCtrl,
                       decoration: InputDecoration(
-                        labelText: 'Nom complet',
+                        labelText: 'admin_full_name'.tr(),
                         prefixIcon: const Icon(Icons.person_rounded, size: 20),
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
                       ),
-                      validator: (v) => v == null || v.trim().isEmpty ? 'Nom requis' : null,
+                      validator: (v) => v == null || v.trim().isEmpty ? 'admin_name_required'.tr() : null,
                     ),
                     const SizedBox(height: 12),
                     TextFormField(
                       controller: emailCtrl,
                       keyboardType: TextInputType.emailAddress,
                       decoration: InputDecoration(
-                        labelText: 'Adresse e-mail',
+                        labelText: 'admin_email_address'.tr(),
                         prefixIcon: const Icon(Icons.alternate_email_rounded, size: 20),
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
                       ),
-                      validator: (v) => v == null || !v.contains('@') ? 'Email invalide' : null,
+                      validator: (v) => v == null || !v.contains('@') ? 'admin_invalid_email'.tr() : null,
                     ),
                     const SizedBox(height: 12),
                     TextFormField(
                       controller: phoneCtrl,
                       keyboardType: TextInputType.phone,
                       decoration: InputDecoration(
-                        labelText: 'Numéro de téléphone',
+                        labelText: 'admin_phone_number'.tr(),
                         prefixIcon: const Icon(Icons.phone_iphone_rounded, size: 20),
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
                       ),
-                      validator: (v) => v == null || v.trim().isEmpty ? 'Téléphone requis' : null,
+                      validator: (v) => v == null || v.trim().isEmpty ? 'admin_phone_required'.tr() : null,
                     ),
                   ],
                 ),
@@ -869,7 +888,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx),
-                child: const Text('Annuler', style: TextStyle(color: Color(0xFF64748B))),
+                child: Text('cancel'.tr(), style: const TextStyle(color: Color(0xFF64748B))),
               ),
               ElevatedButton(
                 onPressed: isSaving
@@ -895,7 +914,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                         }
                         if (mounted && context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
+                            SnackBar(
                               content: Text('Profil Administrateur mis à jour avec succès !'),
                               backgroundColor: Color(0xFF10B981),
                             ),
@@ -913,7 +932,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                         height: 18,
                         child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                       )
-                    : const Text('Enregistrer'),
+                    : Text('Enregistrer'),
               ),
             ],
           );
@@ -926,18 +945,18 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
       context: context,
       builder: (c) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-        title: const Row(
+        title: Row(
           children: [
             Icon(Icons.logout_rounded, color: Color(0xFFDC2626), size: 24),
             SizedBox(width: 10),
-            Text('Déconnexion Admin'),
+            Text('admin_logout_title'.tr()),
           ],
         ),
-        content: const Text('Voulez-vous quitter le panneau d\'administration DAR PLUS ?'),
+        content: Text('admin_logout_confirm'.tr()),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(c),
-            child: const Text('Annuler', style: TextStyle(color: Color(0xFF64748B))),
+            child: Text('cancel'.tr(), style: const TextStyle(color: Color(0xFF64748B))),
           ),
           ElevatedButton(
             onPressed: () async {
@@ -959,7 +978,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                 borderRadius: BorderRadius.circular(12),
               ),
             ),
-            child: const Text('Déconnexion'),
+            child: Text('admin_logout'.tr()),
           ),
         ],
       ),
@@ -988,7 +1007,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
           return StatefulBuilder(
             builder: (ctx, setDlgState) => AlertDialog(
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-              title: const Row(
+              title: Row(
                 children: [
                   Icon(Icons.tune_rounded, color: Color(0xFFD97706), size: 26),
                   SizedBox(width: 10),
@@ -999,8 +1018,8 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   SwitchListTile(
-                    title: const Text('Mode Maintenance', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                    subtitle: const Text('Bloque les accès clients pendant les mises à jour'),
+                    title: Text('admin_maintenance_mode'.tr(), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                    subtitle: Text('admin_maintenance_desc'.tr()),
                     value: maintenance,
                     activeThumbColor: const Color(0xFFD97706),
                     onChanged: (val) async {
@@ -1013,8 +1032,8 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                   ),
                   const Divider(),
                   SwitchListTile(
-                    title: const Text('Admin peut gérer catégories', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                    subtitle: const Text('Autoriser les administrateurs à créer/éditer des catégories'),
+                    title: Text('admin_can_manage_cats'.tr(), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                    subtitle: Text('admin_can_manage_cats_desc'.tr()),
                     value: canCategories,
                     activeThumbColor: const Color(0xFF0D544E),
                     onChanged: (val) async {
@@ -1034,7 +1053,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            const Text('Frais de service plateforme', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                            Text('admin_service_fee'.tr(), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                             Text('${fee.toStringAsFixed(0)} %', style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0D544E))),
                           ],
                         ),
@@ -1068,7 +1087,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                  child: const Text('Fermer'),
+                  child: Text('close'.tr()),
                 ),
               ],
             ),
@@ -1080,8 +1099,8 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
   void _showNewAdminDialog() {
     if (!isSuperAdmin) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Seul le Super Admin peut creer de nouveaux administrateurs.'),
+        SnackBar(
+          content: Text('admin_only_super_admin_categories'.tr()),
           backgroundColor: Colors.redAccent,
         ),
       );
@@ -1097,24 +1116,26 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
       builder: (ctx) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
+            final dlgIsDark = Theme.of(context).brightness == Brightness.dark;
             return AlertDialog(
+              backgroundColor: dlgIsDark ? const Color(0xFF1E293B) : Colors.white,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(24),
               ),
-              title: const Row(
+              title: Row(
                 children: [
-                  Icon(
+                  const Icon(
                     Icons.admin_panel_settings_rounded,
                     color: Color(0xFF7C3AED),
                     size: 26,
                   ),
-                  SizedBox(width: 10),
+                  const SizedBox(width: 10),
                   Text(
-                    'Créer un compte Admin',
+                    'admin_create_account_title'.tr(),
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
-                      color: AppTheme.titleColor,
+                      color: dlgIsDark ? Colors.white : AppTheme.titleColor,
                     ),
                   ),
                 ],
@@ -1125,18 +1146,19 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Text(
-                        'Ajoutez un nouvel administrateur. Un mot de passe sera généré automatiquement et lui sera envoyé directement par e-mail.',
+                      Text(
+                        'admin_create_account_desc'.tr(),
                         style: TextStyle(
                           fontSize: 12.5,
-                          color: AppTheme.subtitleColor,
+                          color: dlgIsDark ? const Color(0xFF94A3B8) : AppTheme.subtitleColor,
                         ),
                       ),
                       const SizedBox(height: 16),
                       TextFormField(
                         controller: nameController,
+                        style: TextStyle(color: dlgIsDark ? Colors.white : AppTheme.titleColor),
                         decoration: InputDecoration(
-                          labelText: 'Nom complet',
+                          labelText: 'admin_full_name'.tr(),
                           prefixIcon: const Icon(Icons.person_rounded, size: 20),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(14),
@@ -1147,14 +1169,15 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                           ),
                         ),
                         validator: (v) =>
-                            v == null || v.trim().isEmpty ? 'Nom requis' : null,
+                            v == null || v.trim().isEmpty ? 'admin_name_required'.tr() : null,
                       ),
                       const SizedBox(height: 12),
                       TextFormField(
                         controller: phoneController,
                         keyboardType: TextInputType.phone,
+                        style: TextStyle(color: dlgIsDark ? Colors.white : AppTheme.titleColor),
                         decoration: InputDecoration(
-                          labelText: 'Téléphone',
+                          labelText: 'admin_phone_number'.tr(),
                           prefixIcon: const Icon(Icons.phone_rounded, size: 20),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(14),
@@ -1165,15 +1188,16 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                           ),
                         ),
                         validator: (v) => v == null || v.trim().isEmpty
-                            ? 'Téléphone requis'
+                            ? 'admin_phone_required'.tr()
                             : null,
                       ),
                       const SizedBox(height: 12),
                       TextFormField(
                         controller: emailController,
                         keyboardType: TextInputType.emailAddress,
+                        style: TextStyle(color: dlgIsDark ? Colors.white : AppTheme.titleColor),
                         decoration: InputDecoration(
-                          labelText: 'Email institutionnel',
+                          labelText: 'admin_institutional_email'.tr(),
                           prefixIcon:
                               const Icon(Icons.alternate_email_rounded, size: 20),
                           border: OutlineInputBorder(
@@ -1185,27 +1209,33 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                           ),
                         ),
                         validator: (v) =>
-                            v == null || !v.contains('@') ? 'Email invalide' : null,
+                            v == null || !v.contains('@') ? 'admin_invalid_email'.tr() : null,
                       ),
                       const SizedBox(height: 14),
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFF3E8FF),
+                          color: dlgIsDark
+                              ? const Color(0xFF4C1D95).withValues(alpha: 0.3)
+                              : const Color(0xFFF3E8FF),
                           borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: const Color(0xFFDDD6FE)),
+                          border: Border.all(
+                            color: dlgIsDark
+                                ? const Color(0xFF7C3AED).withValues(alpha: 0.4)
+                                : const Color(0xFFDDD6FE),
+                          ),
                         ),
-                        child: const Row(
+                        child: Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Icon(Icons.mark_email_read_rounded, color: Color(0xFF7C3AED), size: 20),
-                            SizedBox(width: 8),
+                            const Icon(Icons.mark_email_read_rounded, color: Color(0xFF7C3AED), size: 20),
+                            const SizedBox(width: 8),
                             Expanded(
                               child: Text(
-                                'Le mot de passe sera généré de façon sécurisée et transmis automatiquement par email au nouvel administrateur.',
+                                'admin_password_auto_generated'.tr(),
                                 style: TextStyle(
                                   fontSize: 12,
-                                  color: Color(0xFF5B21B6),
+                                  color: dlgIsDark ? const Color(0xFFC4B5FD) : const Color(0xFF5B21B6),
                                   height: 1.35,
                                   fontWeight: FontWeight.w500,
                                 ),
@@ -1221,8 +1251,8 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(ctx),
-                  child: const Text('Annuler',
-                      style: TextStyle(color: Color(0xFF64748B))),
+                  child: Text('cancel'.tr(),
+                      style: TextStyle(color: dlgIsDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B))),
                 ),
                 ElevatedButton(
                   onPressed: isSubmitting
@@ -1286,7 +1316,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                                 AlwaysStoppedAnimation<Color>(Colors.white),
                           ),
                         )
-                      : const Text('Créer et Envoyer l\'accès'),
+                      : Text('admin_create_and_send'.tr()),
                 ),
               ],
             );
@@ -1300,7 +1330,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: const Row(
+        title: Row(
           children: [
             Icon(Icons.check_circle_rounded, color: Color(0xFF10B981), size: 28),
             SizedBox(width: 10),
@@ -1324,10 +1354,10 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Email envoyé à :', style: TextStyle(fontSize: 12, color: Color(0xFF64748B))),
+                  Text('Email envoyé à :', style: TextStyle(fontSize: 12, color: Color(0xFF64748B))),
                   Text(email, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
                   const SizedBox(height: 10),
-                  const Text('Mot de passe généré automatiquement :', style: TextStyle(fontSize: 12, color: Color(0xFF64748B))),
+                  Text('Mot de passe généré automatiquement :', style: TextStyle(fontSize: 12, color: Color(0xFF64748B))),
                   const SizedBox(height: 4),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -1349,7 +1379,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
               ),
             ),
             const SizedBox(height: 12),
-            const Text('Ce mot de passe a été expédié par e-mail au nouvel administrateur pour lui permettre de se connecter immédiatement.', style: TextStyle(fontSize: 12, color: Color(0xFF64748B))),
+            Text('Ce mot de passe a été expédié par e-mail au nouvel administrateur pour lui permettre de se connecter immédiatement.', style: TextStyle(fontSize: 12, color: Color(0xFF64748B))),
           ],
         ),
         actions: [
@@ -1360,7 +1390,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
-            child: const Text('Compris'),
+            child: Text('Compris'),
           ),
         ],
       ),
@@ -1374,11 +1404,11 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-          title: const Row(
+          title: Row(
             children: [
               Icon(Icons.verified_rounded, color: Color(0xFF10B981), size: 26),
               SizedBox(width: 10),
-              Text('Valider la candidature', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
+              Text('admin_validate_candidacy'.tr(), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
             ],
           ),
           content: Column(
@@ -1429,7 +1459,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
           actions: [
             TextButton(
               onPressed: isApproving ? null : () => Navigator.pop(ctx),
-              child: const Text('Annuler', style: TextStyle(color: Color(0xFF64748B))),
+              child: Text('cancel'.tr(), style: const TextStyle(color: Color(0xFF64748B))),
             ),
             ElevatedButton(
               onPressed: isApproving
@@ -1450,7 +1480,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                           setState(() {});
                         } else {
                           messenger.showSnackBar(
-                            const SnackBar(
+                            SnackBar(
                               content: Text('Erreur lors de la validation. Réessayez.'),
                               backgroundColor: Color(0xFFDC2626),
                             ),
@@ -1473,7 +1503,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
               ),
               child: isApproving
                   ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                  : const Text('Confirmer la validation'),
+                  : Text('admin_confirm_validation_btn'.tr()),
             ),
           ],
         ),
@@ -1488,11 +1518,11 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: const Row(
+        title: Row(
           children: [
             Icon(Icons.cancel_rounded, color: Color(0xFFDC2626), size: 26),
             SizedBox(width: 10),
-            Text('Rejeter la candidature', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
+            Text('admin_reject_candidacy'.tr(), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
           ],
         ),
         content: Form(
@@ -1510,7 +1540,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                 controller: reasonCtrl,
                 maxLines: 3,
                 decoration: InputDecoration(
-                  labelText: 'Motif du rejet *',
+                  labelText: 'admin_rejection_reason'.tr(),
                   hintText: 'Expliquez la raison du rejet...',
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
                 ),
@@ -1525,7 +1555,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Annuler'),
+            child: Text('cancel'.tr()),
           ),
           ElevatedButton(
             onPressed: () async {
@@ -1555,7 +1585,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
-            child: const Text('Confirmer le rejet'),
+            child: Text('admin_confirm_rejection_btn'.tr()),
           ),
         ],
       ),
@@ -1604,7 +1634,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                       children: [
                         Text('$docName (PDF vérifié)',
                             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                        const Text('Validité conforme �?� République Tunisienne',
+                        Text('Validité conforme �?� République Tunisienne',
                             style: TextStyle(color: Color(0xFF64748B), fontSize: 11)),
                       ],
                     ),
@@ -1617,7 +1647,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Fermer'),
+            child: Text('close'.tr()),
           ),
         ],
       ),
@@ -1698,7 +1728,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                 _showEditUserRoleDialog(user);
               },
               icon: const Icon(Icons.manage_accounts_rounded, size: 16),
-              label: const Text('Modifier rôle'),
+              label: Text('Modifier rôle'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF7C3AED),
                 foregroundColor: Colors.white,
@@ -1707,7 +1737,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
             ),
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Fermer'),
+            child: Text('close'.tr()),
           ),
         ],
       ),
@@ -1740,17 +1770,17 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
             children: [
               Text('Email : $email', style: const TextStyle(fontSize: 13, color: Color(0xFF64748B))),
               const SizedBox(height: 16),
-              const Text('Sélectionnez le nouveau rôle :', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+              Text('admin_select_new_role'.tr(), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
               const SizedBox(height: 10),
-              _buildRoleOption('client', 'Client (Accès standard)', selectedRole, (val) => setDialogState(() => selectedRole = val)),
-              _buildRoleOption('professionnel', 'Professionnel (Prestation de services)', selectedRole, (val) => setDialogState(() => selectedRole = val)),
-              _buildRoleOption('admin', 'Admin (Gestion courante limitée)', selectedRole, (val) => setDialogState(() => selectedRole = val)),
+              _buildRoleOption('client', 'admin_role_client_desc'.tr(), selectedRole, (val) => setDialogState(() => selectedRole = val)),
+              _buildRoleOption('professionnel', 'admin_role_pro_desc'.tr(), selectedRole, (val) => setDialogState(() => selectedRole = val)),
+              _buildRoleOption('admin', 'admin_role_admin_desc'.tr(), selectedRole, (val) => setDialogState(() => selectedRole = val)),
             ],
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const Text('Annuler'),
+              child: Text('cancel'.tr()),
             ),
             ElevatedButton(
               onPressed: isSaving
@@ -1784,7 +1814,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
               ),
               child: isSaving
                   ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                  : const Text('Enregistrer'),
+                  : Text('Enregistrer'),
             ),
           ],
         ),
@@ -1841,14 +1871,14 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
             children: [
               Text(
                 label,
-                style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+                style: TextStyle(fontSize: 11, color: _textSecondary),
               ),
               Text(
                 value,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13.5,
                   fontWeight: FontWeight.w600,
-                  color: Color(0xFF0F172A),
+                  color: _textPrimary,
                 ),
               ),
             ],
@@ -1859,13 +1889,19 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
   }
   @override
   Widget build(BuildContext context) {
+    context.watch<ThemeProvider>();
+    context.watch<LocaleProvider>();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final scaffoldBg = isDark ? const Color(0xFF0F172A) : const Color(0xFFF7F9F9);
+    final navBg = isDark ? const Color(0xFF1E293B) : Colors.white;
+
     return StreamBuilder<List<ProApplication>>(
       stream: FirebaseService().streamProApplications(),
       builder: (context, snapshot) {
         final allList = snapshot.data ?? [];
         final pendingList = allList.where((a) => a.status == 'en_attente').toList();
         return Scaffold(
-          backgroundColor: const Color(0xFFF7F9F9),
+          backgroundColor: scaffoldBg,
           body: SafeArea(
             bottom: false,
             child: IndexedStack(
@@ -1888,13 +1924,13 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
           ),
           bottomNavigationBar: Container(
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: navBg,
               border: Border(
-                top: BorderSide(color: Colors.grey.withValues(alpha: 0.15)),
+                top: BorderSide(color: isDark ? const Color(0xFF334155) : Colors.grey.withValues(alpha: 0.15)),
               ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.04),
+                  color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
                   blurRadius: 10,
                   offset: const Offset(0, -3),
                 ),
@@ -1908,22 +1944,22 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                 });
               },
               type: BottomNavigationBarType.fixed,
-              backgroundColor: Colors.white,
+              backgroundColor: navBg,
               selectedItemColor: const Color(0xFF0D544E),
-              unselectedItemColor: const Color(0xFF64748B),
+              unselectedItemColor: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
               selectedFontSize: 11,
               unselectedFontSize: 10.5,
               selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold),
               elevation: 0,
               items: [
-                const BottomNavigationBarItem(
-                  icon: Icon(Icons.grid_view_rounded),
-                  label: 'Tableau',
+                BottomNavigationBarItem(
+                  icon: const Icon(Icons.grid_view_rounded),
+                  label: 'admin_dashboard'.tr(),
                 ),
-                const BottomNavigationBarItem(
-                  icon: Icon(Icons.people_outline_rounded),
-                  activeIcon: Icon(Icons.people_rounded),
-                  label: 'Utilisateurs',
+                BottomNavigationBarItem(
+                  icon: const Icon(Icons.people_outline_rounded),
+                  activeIcon: const Icon(Icons.people_rounded),
+                  label: 'admin_users'.tr(),
                 ),
                 BottomNavigationBarItem(
                   icon: Stack(
@@ -1953,18 +1989,18 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                     ],
                   ),
                   activeIcon: const Icon(Icons.verified_user_rounded),
-                  label: 'Validations',
+                  label: 'admin_validations'.tr(),
                 ),
-                const BottomNavigationBarItem(
-                  icon: Icon(Icons.category_outlined),
-                  activeIcon: Icon(Icons.category_rounded),
-                  label: 'Catégories',
+                BottomNavigationBarItem(
+                  icon: const Icon(Icons.category_outlined),
+                  activeIcon: const Icon(Icons.category_rounded),
+                  label: 'admin_categories'.tr(),
                 ),
-                // 5th ITEM: PROFIL (EXACTEMENT DEMAND�? PAR L'UTILISATEUR)
-                const BottomNavigationBarItem(
-                  icon: Icon(Icons.person_outline_rounded),
-                  activeIcon: Icon(Icons.person_rounded),
-                  label: 'Profil',
+                // 5th ITEM: PROFIL (EXACTEMENT DEMANDÉ PAR L'UTILISATEUR)
+                BottomNavigationBarItem(
+                  icon: const Icon(Icons.person_outline_rounded),
+                  activeIcon: const Icon(Icons.person_rounded),
+                  label: 'profile'.tr(),
                 ),
               ],
             ),
@@ -1973,7 +2009,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
       },
     );
   }
-  //  TAB 0: DASHBOARD 
+  // ================= TAB 0: DASHBOARD =================
   Widget _buildDashboardTab(List<ProApplication> pendingList) {
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
@@ -1994,12 +2030,12 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                 ),
               ),
               const SizedBox(width: 10),
-              const Text(
-                'Tableau de bord',
+              Text(
+                'admin_dashboard'.tr(),
                 style: TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFF0F172A),
+                  color: _textPrimary,
                   letterSpacing: -0.4,
                 ),
               ),
@@ -2027,11 +2063,11 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                       decoration: BoxDecoration(
-                        color: isSuperAdmin ? const Color(0xFFD97706) : const Color(0xFF0F172A),
+                        color: isSuperAdmin ? const Color(0xFFD97706) : (_isDark ? const Color(0xFF334155) : const Color(0xFF0F172A)),
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text(
-                        isSuperAdmin ? 'Super Admin' : 'Admin',
+                        isSuperAdmin ? 'admin_super_admin'.tr() : 'admin_role_badge'.tr(),
                         style: const TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.bold,
@@ -2056,37 +2092,37 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
             children: [
               _buildDashboardCard(
                 icon: Icons.people_alt_rounded,
-                iconBg: const Color(0xFFF1F5F9),
-                iconColor: const Color(0xFF0F172A),
+                iconBg: _isDark ? const Color(0xFF334155) : const Color(0xFFF1F5F9),
+                iconColor: _isDark ? Colors.white : const Color(0xFF0F172A),
                 value: '1 284',
-                label: 'Utilisateurs',
+                label: 'admin_kpi_users'.tr(),
                 onTap: () => setState(() => _currentBottomNavIndex = 1),
               ),
               _buildDashboardCard(
                 icon: Icons.verified_user_rounded,
-                iconBg: const Color(0xFFFFF7ED),
+                iconBg: _isDark ? const Color(0xFFEA580C).withValues(alpha: 0.2) : const Color(0xFFFFF7ED),
                 iconColor: const Color(0xFFEA580C),
                 value: '${pendingList.length}',
                 valueColor: const Color(0xFFEA580C),
-                label: 'Pros à valider',
+                label: 'admin_kpi_pros_pending'.tr(),
                 onTap: () => setState(() => _currentBottomNavIndex = 2),
               ),
               _buildDashboardCard(
                 icon: Icons.category_rounded,
-                iconBg: const Color(0xFFFEF3C7),
+                iconBg: _isDark ? const Color(0xFFD97706).withValues(alpha: 0.2) : const Color(0xFFFEF3C7),
                 iconColor: const Color(0xFFD97706),
                 value: '${_adminCategories.length}',
                 valueColor: const Color(0xFFD97706),
-                label: 'Catégories',
+                label: 'admin_kpi_categories'.tr(),
                 onTap: () => setState(() => _currentBottomNavIndex = 3),
               ),
               _buildDashboardCard(
                 icon: Icons.person_rounded,
-                iconBg: const Color(0xFFD7F3EA),
+                iconBg: _isDark ? const Color(0xFF0D544E).withValues(alpha: 0.25) : const Color(0xFFD7F3EA),
                 iconColor: const Color(0xFF0D544E),
-                value: 'Profil',
-                valueColor: const Color(0xFF0D544E),
-                label: 'Mon Profil Admin',
+                value: 'profile'.tr(),
+                valueColor: _isDark ? const Color(0xFF10B981) : const Color(0xFF0D544E),
+                label: 'admin_kpi_profile'.tr(),
                 onTap: () => setState(() => _currentBottomNavIndex = 4),
               ),
             ],
@@ -2096,8 +2132,9 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: _cardBg,
               borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: _borderColor),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withValues(alpha: 0.03),
@@ -2109,12 +2146,12 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Réservations par semaine',
+                Text(
+                  'admin_reservations_weekly'.tr(),
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFF0F172A),
+                    color: _textPrimary,
                   ),
                 ),
                 const SizedBox(height: 20),
@@ -2136,22 +2173,22 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'À traiter',
+              Text(
+                'admin_to_process'.tr(),
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFF0F172A),
+                  color: _textPrimary,
                 ),
               ),
               GestureDetector(
                 onTap: () => setState(() => _currentBottomNavIndex = 2),
-                child: const Text(
-                  'Tout voir',
+                child: Text(
+                  'admin_see_all'.tr(),
                   style: TextStyle(
                     fontSize: 13.5,
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFF0D544E),
+                    color: _isDark ? const Color(0xFF10B981) : const Color(0xFF0D544E),
                   ),
                 ),
               ),
@@ -2163,13 +2200,14 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
               width: double.infinity,
               padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: _cardBg,
                 borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: _borderColor),
               ),
-              child: const Center(
+              child: Center(
                 child: Text(
-                  'Aucune demande en attente pour le moment.',
-                  style: TextStyle(color: Color(0xFF94A3B8), fontSize: 13.5),
+                  'admin_no_pending_requests'.tr(),
+                  style: TextStyle(color: _textSecondary, fontSize: 13.5),
                 ),
               ),
             )
@@ -2178,11 +2216,12 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
               return Container(
                 margin: const EdgeInsets.only(bottom: 10),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: _cardBg,
                   borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: _borderColor),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.025),
+                      color: Colors.black.withValues(alpha: _isDark ? 0.2 : 0.025),
                       blurRadius: 8,
                       offset: const Offset(0, 2),
                     ),
@@ -2205,19 +2244,13 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                   ),
                   title: Text(
                     app.fullName,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 14.5,
                       fontWeight: FontWeight.bold,
-                      color: Color(0xFF0F172A),
+                      color: _textPrimary,
                     ),
                   ),
-                  subtitle: Text(
-                    'Demande de validation �?� ${app.serviceType}',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: Color(0xFF64748B),
-                    ),
-                  ),
+                  subtitle: Text('${'admin_validations'.tr()} · ${app.serviceType}', style: TextStyle(fontSize: 12, color: _textSecondary)),
                   trailing: const Icon(
                     Icons.chevron_right_rounded,
                     color: Color(0xFF94A3B8),
@@ -2245,11 +2278,12 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: _cardBg,
           borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: _borderColor),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.03),
+              color: Colors.black.withValues(alpha: _isDark ? 0.2 : 0.03),
               blurRadius: 10,
               offset: const Offset(0, 3),
             ),
@@ -2274,16 +2308,16 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
               style: TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.bold,
-                color: valueColor ?? const Color(0xFF0F172A),
+                color: valueColor ?? _textPrimary,
                 letterSpacing: -0.5,
               ),
             ),
             const SizedBox(height: 2),
             Text(
               label,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12.5,
-                color: Color(0xFF64748B),
+                color: _textSecondary,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -2305,7 +2339,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
           decoration: BoxDecoration(
             color: isSolidTeal
                 ? const Color(0xFF0D544E)
-                : const Color(0xFFB7DFD7),
+                : (_isDark ? const Color(0xFF0D544E).withValues(alpha: 0.35) : const Color(0xFFB7DFD7)),
             borderRadius: BorderRadius.circular(10),
           ),
         ),
@@ -2315,13 +2349,15 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
           style: TextStyle(
             fontSize: 12,
             fontWeight: isSolidTeal ? FontWeight.bold : FontWeight.w600,
-            color: isSolidTeal ? const Color(0xFF0D544E) : const Color(0xFF94A3B8),
+            color: isSolidTeal
+                ? (_isDark ? const Color(0xFF10B981) : const Color(0xFF0D544E))
+                : _textSecondary,
           ),
         ),
       ],
     );
   }
-  //  TAB 1: UTILISATEURS (FONCTIONNEL ET CONNECT�? FIREBASE) 
+  // ================= TAB 1: UTILISATEURS (FONCTIONNEL ET CONNECT�? FIREBASE) =================
   Widget _buildUsersTab() {
     return StreamBuilder<List<Map<String, dynamic>>>(
       stream: FirebaseService().streamUsers(),
@@ -2358,12 +2394,12 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
               Row(
                 children: [
     
-                  const Text(
-                    'Utilisateurs',
+                  Text(
+                    'admin_users'.tr(),
                     style: TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.bold,
-                      color: Color(0xFF0F172A),
+                      color: _textPrimary,
                       letterSpacing: -0.4,
                     ),
                   ),
@@ -2373,7 +2409,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                   ElevatedButton.icon(
                     onPressed: _showNewAdminDialog,
                     icon: const Icon(Icons.person_add_rounded, size: 16),
-                    label: const Text('+ Admin'),
+                    label: Text('+ Admin'),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF0D544E),
                       foregroundColor: Colors.white,
@@ -2392,25 +2428,26 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                 height: 46,
                 padding: const EdgeInsets.symmetric(horizontal: 14),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: _cardBg,
                   borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                  border: Border.all(color: _borderColor),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.search_rounded, color: Color(0xFF94A3B8), size: 20),
+                    Icon(Icons.search_rounded, color: _textSecondary, size: 20),
                     const SizedBox(width: 10),
                     Expanded(
                       child: TextField(
                         controller: _userSearchController,
+                        style: TextStyle(color: _textPrimary),
                         onChanged: (val) {
                           setState(() {
                             _userSearchQuery = val;
                           });
                         },
-                        decoration: const InputDecoration(
-                          hintText: 'Rechercher un utilisateur (nom, email)...',
-                          hintStyle: TextStyle(fontSize: 13, color: Color(0xFF94A3B8)),
+                        decoration: InputDecoration(
+                          hintText: 'admin_search_users_hint'.tr(),
+                          hintStyle: TextStyle(fontSize: 13, color: _textSecondary),
                           border: InputBorder.none,
                           isDense: true,
                         ),
@@ -2433,21 +2470,21 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                 scrollDirection: Axis.horizontal,
                 child: Row(
                   children: [
-                    _buildUserRoleChip('tous', 'Tous (${allUsers.length})'),
+                    _buildUserRoleChip('tous', '${'admin_filter_all'.tr()} (${allUsers.length})'),
                     const SizedBox(width: 8),
                     _buildUserRoleChip(
                       'client',
-                      'Clients (${allUsers.where((u) => (u['role'] as String? ?? 'client').toLowerCase() == 'client').length})',
+                      '${'admin_filter_clients'.tr()} (${allUsers.where((u) => (u['role'] as String? ?? 'client').toLowerCase() == 'client').length})',
                     ),
                     const SizedBox(width: 8),
                     _buildUserRoleChip(
                       'professionnel',
-                      'Pros (${allUsers.where((u) => (u['role'] as String? ?? '').toLowerCase() == 'professionnel').length})',
+                      '${'admin_filter_pros'.tr()} (${allUsers.where((u) => (u['role'] as String? ?? '').toLowerCase() == 'professionnel').length})',
                     ),
                     const SizedBox(width: 8),
                     _buildUserRoleChip(
                       'admin',
-                      'Admins (${allUsers.where((u) => (u['role'] as String? ?? '').toLowerCase() == 'admin').length})',
+                      '${'admin_filter_admins'.tr()} (${allUsers.where((u) => (u['role'] as String? ?? '').toLowerCase() == 'admin').length})',
                     ),
                   ],
                 ),
@@ -2463,8 +2500,8 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                             Icon(Icons.people_outline_rounded,
                                 size: 48, color: Colors.grey.withValues(alpha: 0.5)),
                             const SizedBox(height: 10),
-                            const Text(
-                              'Aucun utilisateur trouvé',
+                            Text(
+                              'admin_no_users_found'.tr(),
                               style: TextStyle(
                                   color: Color(0xFF64748B),
                                   fontWeight: FontWeight.bold),
@@ -2493,16 +2530,16 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFF0D544E) : Colors.white,
+          color: isSelected ? const Color(0xFF0D544E) : _cardBg,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: isSelected ? const Color(0xFF0D544E) : const Color(0xFFE2E8F0),
+            color: isSelected ? const Color(0xFF0D544E) : _borderColor,
           ),
         ),
         child: Text(
           label,
           style: TextStyle(
-            color: isSelected ? Colors.white : const Color(0xFF64748B),
+            color: isSelected ? Colors.white : _textSecondary,
             fontSize: 12,
             fontWeight: FontWeight.bold,
           ),
@@ -2521,19 +2558,19 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
     switch (role) {
       case 'super_admin':
         roleColor = const Color(0xFFD97706);
-        roleLabel = 'Super Admin';
+        roleLabel = 'admin_super_admin'.tr();
         break;
       case 'admin':
         roleColor = const Color(0xFF7C3AED);
-        roleLabel = 'Admin';
+        roleLabel = 'admin_role_badge'.tr();
         break;
       case 'professionnel':
         roleColor = const Color(0xFF059669);
-        roleLabel = 'Pro · ${user['serviceType'] ?? "Service"}';
+        roleLabel = '${'role_pro'.tr()} · ${user['serviceType'] ?? "Service"}';
         break;
       default:
         roleColor = const Color(0xFF2563EB);
-        roleLabel = 'Client';
+        roleLabel = 'role_client'.tr();
     }
     final bool isTargetAdmin = role == 'admin' || role == 'super_admin';
     final bool canManageThisUser = isSuperAdmin || !isTargetAdmin;
@@ -2541,12 +2578,12 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: _cardBg,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: _borderColor),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.02),
+            color: Colors.black.withValues(alpha: _isDark ? 0.2 : 0.02),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -2590,16 +2627,16 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                   children: [
                     Text(
                       fullName,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.bold,
-                        color: Color(0xFF0F172A),
+                        color: _textPrimary,
                       ),
                     ),
                     const SizedBox(height: 2),
                     Text(
                       email,
-                      style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                      style: TextStyle(fontSize: 12, color: _textSecondary),
                     ),
                   ],
                 ),
@@ -2622,7 +2659,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
             ],
           ),
           const SizedBox(height: 10),
-          const Divider(height: 1, color: Color(0xFFF1F5F9)),
+          Divider(height: 1, color: _borderColor),
           const SizedBox(height: 8),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -2644,7 +2681,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                     ),
                     const SizedBox(width: 4),
                     Text(
-                      isActive ? 'Actif' : 'Suspendu',
+                      isActive ? 'admin_status_active'.tr() : 'admin_status_suspended'.tr(),
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.bold,
@@ -2663,7 +2700,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                       minimumSize: Size.zero,
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
-                    child: const Text('Détails', style: TextStyle(fontSize: 12)),
+                    child: Text('admin_btn_details'.tr(), style: const TextStyle(fontSize: 12)),
                   ),
                   const SizedBox(width: 6),
                   if (canManageThisUser)
@@ -2690,7 +2727,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                       ),
                     ),
                     child: Text(
-                      isActive ? 'Suspendre' : 'Activer',
+                      isActive ? 'admin_btn_suspend'.tr() : 'admin_btn_activate'.tr(),
                       style: TextStyle(
                         fontSize: 11.5,
                         fontWeight: FontWeight.bold,
@@ -2709,12 +2746,12 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                       showDialog(
                         context: context,
                         builder: (ctx) => AlertDialog(
-                          title: const Text('Supprimer l\'utilisateur'),
+                          title: Text('admin_delete_user'.tr()),
                           content: Text('Voulez-vous supprimer définitivement $fullName ?'),
                           actions: [
                             TextButton(
                               onPressed: () => Navigator.pop(ctx),
-                              child: const Text('Annuler'),
+                              child: Text('cancel'.tr()),
                             ),
                             ElevatedButton(
                               onPressed: () async {
@@ -2726,7 +2763,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                                 backgroundColor: const Color(0xFFDC2626),
                                 foregroundColor: Colors.white,
                               ),
-                              child: const Text('Supprimer'),
+                              child: Text('Supprimer'),
                             ),
                           ],
                         ),
@@ -2741,7 +2778,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
       ),
     );
   }
-  //  validation des pros
+  // ================= TAB 2: VALIDATIONS DES PROS (EXACT DESIGN MATCH TO SCREENSHOT) =================
   Widget _buildValidationsTab(List<ProApplication> allList) {
     final pendingList = allList.where((a) => a.status == 'en_attente').toList();
     final validatedList = allList.where((a) => a.status == 'valide').toList();
@@ -2761,25 +2798,25 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
           padding: const EdgeInsets.only(left: 18, right: 18, top: 16, bottom: 8),
           child: Row(
             children: [
-              const Text(
-                'Validation des pros',
+              Text(
+                'admin_validations'.tr(),
                 style: TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFF0F172A),
+                  color: _textPrimary,
                   letterSpacing: -0.4,
                 ),
               ),
             ],
           ),
         ),
-        //  Filter Validés,Rejetés
+        // 2. Horizontal Filter Tabs: "�? valider (X)", "Validés", "Rejetés"
         Container(
           width: double.infinity,
-          decoration: const BoxDecoration(
-            color: Color(0xFFF7F9F9),
+          decoration: BoxDecoration(
+            color: _isDark ? const Color(0xFF1E293B) : const Color(0xFFF7F9F9),
             border: Border(
-              bottom: BorderSide(color: Color(0xFFE2E8F0), width: 1),
+              bottom: BorderSide(color: _borderColor, width: 1),
             ),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 18),
@@ -2787,21 +2824,21 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
             children: [
               _buildValidationSubTabItem(
                 index: 0,
-                label: 'À valider',
+                label: 'admin_tab_to_validate'.tr(),
                 badgeCount: pendingList.length,
                 isSelected: _selectedValidationTab == 0,
               ),
               const SizedBox(width: 24),
               _buildValidationSubTabItem(
                 index: 1,
-                label: 'Validés',
+                label: 'admin_tab_validated'.tr(),
                 badgeCount: null,
                 isSelected: _selectedValidationTab == 1,
               ),
               const SizedBox(width: 24),
               _buildValidationSubTabItem(
                 index: 2,
-                label: 'Rejetés',
+                label: 'admin_tab_rejected'.tr(),
                 badgeCount: null,
                 isSelected: _selectedValidationTab == 2,
               ),
@@ -2821,10 +2858,10 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                       const SizedBox(height: 12),
                       Text(
                         _selectedValidationTab == 0
-                            ? 'Aucune demande en attente'
+                            ? 'admin_no_pending'.tr()
                             : (_selectedValidationTab == 1
-                                ? 'Aucun professionnel validé'
-                                : 'Aucune demande rejetée'),
+                                ? 'admin_no_validated'.tr()
+                                : 'admin_no_rejected'.tr()),
                         style: const TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.bold,
@@ -2877,7 +2914,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
               style: TextStyle(
                 fontSize: 15,
                 fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
-                color: isSelected ? const Color(0xFF0D544E) : const Color(0xFF64748B),
+                color: isSelected ? (_isDark ? const Color(0xFF10B981) : const Color(0xFF0D544E)) : _textSecondary,
               ),
             ),
             if (badgeCount != null && badgeCount > 0) ...[
@@ -2934,12 +2971,12 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: _cardBg,
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: const Color(0xFFE2E8F0), width: 1.2),
+        border: Border.all(color: _borderColor, width: 1.2),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.02),
+            color: Colors.black.withValues(alpha: _isDark ? 0.2 : 0.02),
             blurRadius: 10,
             offset: const Offset(0, 3),
           ),
@@ -2976,18 +3013,18 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                   children: [
                     Text(
                       app.fullName,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
-                        color: Color(0xFF0F172A),
+                        color: _textPrimary,
                       ),
                     ),
                     const SizedBox(height: 2),
                     Text(
                       '${app.serviceType} · $city',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 13,
-                        color: Color(0xFF64748B),
+                        color: _textSecondary,
                       ),
                     ),
                   ],
@@ -3011,26 +3048,26 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
             ],
           ),
           const SizedBox(height: 14),
-          // documents 
+          // 2. Documents row (Pièce d'identité, Certificat)
           Row(
             children: [
               _buildDocumentPill(
                 icon: Icons.badge_outlined,
-                label: 'Pièce d\'identité',
+                label: 'admin_doc_id'.tr(),
                 onTap: () => _showDocumentPreview(app, 'Pièce d\'identité'),
               ),
               if (index != 1) ...[
                 const SizedBox(width: 8),
                 _buildDocumentPill(
                   icon: Icons.description_outlined,
-                  label: 'Certificat',
+                  label: 'admin_doc_cert'.tr(),
                   onTap: () => _showDocumentPreview(app, 'Certificat Professionnel'),
                 ),
               ],
             ],
           ),
           const SizedBox(height: 16),
-          // Rejeter  & Valider
+          // 3. Action Buttons: "Rejeter" (red outlined) & "Valider" (dark teal filled)
           Row(
             children: [
               Expanded(
@@ -3046,7 +3083,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                       ),
                     ),
                     child: Text(
-                      app.status == 'refuse' ? 'Déjà rejeté' : 'Rejeter',
+                      app.status == 'refuse' ? 'admin_already_rejected'.tr() : 'admin_btn_reject'.tr(),
                       style: const TextStyle(
                         fontSize: 14.5,
                         fontWeight: FontWeight.bold,
@@ -3070,7 +3107,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                       ),
                     ),
                     child: Text(
-                      app.status == 'valide' ? 'Déjà validé' : 'Valider',
+                      app.status == 'valide' ? 'admin_already_validated'.tr() : 'admin_btn_validate'.tr(),
                       style: const TextStyle(
                         fontSize: 14.5,
                         fontWeight: FontWeight.bold,
@@ -3095,21 +3132,21 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          color: const Color(0xFFF1F5F9),
+          color: _isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: const Color(0xFFE2E8F0)),
+          border: Border.all(color: _borderColor),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 16, color: const Color(0xFF64748B)),
+            Icon(icon, size: 16, color: _textSecondary),
             const SizedBox(width: 6),
             Text(
               label,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: Color(0xFF334155),
+                color: _isDark ? const Color(0xFFCBD5E1) : const Color(0xFF334155),
               ),
             ),
           ],
@@ -3117,7 +3154,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
       ),
     );
   }
-  //  catégories
+  // ================= TAB 3: CATÉGORIES (EXACT DESIGN MATCH TO LATEST SCREENSHOT) =================
   Widget _buildCategoriesTab() {
     final activeCount = _adminCategories.where((c) => c['isActive'] == true).length;
     final totalCount = _adminCategories.length;
@@ -3128,36 +3165,36 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // menu button + catégories
+              // 1. Top Bar: Menu Button + Title "Catégories"
               Row(
                 children: [
     
-                  const Text(
-                    'Catégories',
+                  Text(
+                    'admin_categories'.tr(),
                     style: TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.bold,
-                      color: Color(0xFF0F172A),
+                      color: _textPrimary,
                       letterSpacing: -0.4,
                     ),
                   ),
                 ],
               ),
               const SizedBox(height: 6),
-              // subtitle: 
+              // 2. Subtitle: "8 catégories · 7 actives"
               Padding(
                 padding: const EdgeInsets.only(left: 4),
                 child: Text(
                   '$totalCount catégories · $activeCount actives',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
-                    color: Color(0xFF64748B),
+                    color: _textSecondary,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
               ),
               const SizedBox(height: 16),
-              // category cards list
+              // 3. Category Cards List
               Expanded(
                 child: ListView.builder(
                   padding: const EdgeInsets.only(bottom: 80),
@@ -3169,12 +3206,12 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                       margin: const EdgeInsets.only(bottom: 12),
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: _cardBg,
                         borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: const Color(0xFFE2E8F0), width: 1.2),
+                        border: Border.all(color: _borderColor, width: 1.2),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.02),
+                            color: Colors.black.withValues(alpha: _isDark ? 0.2 : 0.02),
                             blurRadius: 8,
                             offset: const Offset(0, 2),
                           ),
@@ -3182,7 +3219,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                       ),
                       child: Row(
                         children: [
-                          
+                          // Squircle Icon container
                           Container(
                             width: 48,
                             height: 48,
@@ -3205,28 +3242,26 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                               children: [
                                 Text(
                                   cat['name'] as String,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 15.5,
                                     fontWeight: FontWeight.bold,
-                                    color: Color(0xFF0F172A),
+                                    color: _textPrimary,
                                   ),
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
                                   isActive
-                                      ? '${cat['pros']} professionnel${(cat['pros'] as int? ?? 0) > 1 ? 's' : ''}'
-                                      : 'Désactivée',
+                                      ? '${cat['pros']} ${'admin_categories_word'.tr()}'
+                                      : 'admin_status_suspended'.tr(),
                                   style: TextStyle(
                                     fontSize: 12.5,
-                                    color: isActive
-                                        ? const Color(0xFF64748B)
-                                        : const Color(0xFF94A3B8),
+                                    color: _textSecondary,
                                   ),
                                 ),
                               ],
                             ),
                           ),
-                          //  compteur 
+                          // Badge compteur pros
                           if (isActive) ...[
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -3245,14 +3280,14 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                             ),
                             const SizedBox(width: 6),
                           ],
-                          //  Edit button
+                          // Pencil Edit button
                           IconButton(
-                            icon: const Icon(Icons.edit_outlined,
-                                size: 20, color: Color(0xFF64748B)),
+                            icon: Icon(Icons.edit_outlined,
+                                size: 20, color: _textSecondary),
                             onPressed: () => _showEditCategoryDialog(cat),
                           ),
                           const SizedBox(width: 2),
-                          // toggle
+                          // Switch Toggle
                           Switch(
                             value: isActive,
                             activeTrackColor: const Color(0xFF0D544E),
@@ -3262,7 +3297,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                             onChanged: (val) async {
                               if (!canManageCategories) {
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
+                                  SnackBar(
                                     content: Text('Action non autorisée.'),
                                     backgroundColor: Colors.redAccent,
                                   ),
@@ -3284,7 +3319,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
             ],
           ),
         ),
-        // boutton add catégorie
+        // 4. Floating Action Button: "+ Nouvelle catégorie" (Orange pill matching screenshot)
         Positioned(
           right: 20,
           bottom: 20,
@@ -3303,14 +3338,14 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                   ),
                 ],
               ),
-              child: const Row(
+              child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.add_rounded, color: Color(0xFF0F172A), size: 20),
-                  SizedBox(width: 8),
+                  const Icon(Icons.add_rounded, color: Color(0xFF0F172A), size: 20),
+                  const SizedBox(width: 8),
                   Text(
-                    'Nouvelle catégorie',
-                    style: TextStyle(
+                    'admin_new_category'.tr(),
+                    style: const TextStyle(
                       color: Color(0xFF0F172A),
                       fontSize: 14.5,
                       fontWeight: FontWeight.bold,
@@ -3332,7 +3367,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
     }
     return parts[0].substring(0, parts[0].length >= 2 ? 2 : 1).toUpperCase();
   }
-  // update profil admin
+  // ================= TAB 4: PROFIL ADMIN (MODIFIER PROFIL & LOGOUT) =================
   Widget _buildAdminProfileTab() {
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
@@ -3340,15 +3375,15 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // menu hamburger + profil admin
+          // Top bar: Menu Hamburger + "Mon Profil Admin"
           Row(
             children: [
-              const Text(
-                'Mon Profil Admin',
+              Text(
+                'admin_profile'.tr(),
                 style: TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFF0F172A),
+                  color: _textPrimary,
                   letterSpacing: -0.4,
                 ),
               ),
@@ -3446,7 +3481,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                 ElevatedButton.icon(
                   onPressed: _showEditAdminProfileDialog,
                   icon: const Icon(Icons.edit_rounded, size: 16),
-                  label: const Text('Modifier mon profil'),
+                  label: Text('admin_edit_profile'.tr()),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.white,
                     foregroundColor: const Color(0xFF0D544E),
@@ -3463,64 +3498,107 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
           const SizedBox(height: 20),
           // Options & Parameters
           Material(
-            color: Colors.white,
+            color: _cardBg,
             borderRadius: BorderRadius.circular(20),
             clipBehavior: Clip.antiAlias,
             child: Container(
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: _cardBg,
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: const Color(0xFFE2E8F0)),
+              border: Border.all(color: _borderColor),
             ),
             child: Column(
               children: [
                 ListTile(
-                  leading: const CircleAvatar(
-                    backgroundColor: Color(0xFFD7F3EA),
-                    child: Icon(Icons.badge_outlined, color: Color(0xFF0D544E)),
+                  leading: CircleAvatar(
+                    backgroundColor: _isDark ? const Color(0xFF0D544E).withValues(alpha: 0.25) : const Color(0xFFD7F3EA),
+                    child: const Icon(Icons.badge_outlined, color: Color(0xFF0D544E)),
                   ),
-                  title: const Text('Coordonnées & Informations',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14.5)),
-                  subtitle: const Text('Modifier nom, téléphone et adresse email'),
-                  trailing: const Icon(Icons.chevron_right_rounded),
+                  title: Text('admin_info_coords'.tr(),
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14.5, color: _textPrimary)),
+                  subtitle: Text('admin_info_coords_sub'.tr(),
+                      style: TextStyle(color: _textSecondary)),
+                  trailing: Icon(Icons.chevron_right_rounded, color: _textSecondary),
                   onTap: _showEditAdminProfileDialog,
                 ),
-                const Divider(height: 1, indent: 64),
+                Divider(height: 1, indent: 64, color: _borderColor),
                 ListTile(
-                  leading: const CircleAvatar(
-                    backgroundColor: Color(0xFFFEF3C7),
-                    child: Icon(Icons.lock_reset_rounded, color: Color(0xFFD97706)),
+                  leading: CircleAvatar(
+                    backgroundColor: _isDark ? const Color(0xFFD97706).withValues(alpha: 0.25) : const Color(0xFFFEF3C7),
+                    child: const Icon(Icons.lock_reset_rounded, color: Color(0xFFD97706)),
                   ),
-                  title: const Text('Sécurité & Mot de passe',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14.5)),
-                  subtitle: const Text('Modifier votre mot de passe directement'),
-                  trailing: const Icon(Icons.chevron_right_rounded),
+                  title: Text('admin_security_pass'.tr(),
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14.5, color: _textPrimary)),
+                  subtitle: Text('admin_security_pass_sub'.tr(),
+                      style: TextStyle(color: _textSecondary)),
+                  trailing: Icon(Icons.chevron_right_rounded, color: _textSecondary),
                   onTap: _showChangePasswordDialog,
                 ),
-                const Divider(height: 1, indent: 64),
+                Divider(height: 1, indent: 64, color: _borderColor),
+                ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: _isDark ? const Color(0xFF0284C7).withValues(alpha: 0.25) : const Color(0xFFE0F2FE),
+                    child: const Icon(Icons.language_rounded, color: Color(0xFF0284C7)),
+                  ),
+                  title: Text('language'.tr(),
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14.5, color: _textPrimary)),
+                  subtitle: Text(
+                    context.locale.languageCode == 'fr'
+                        ? 'Français 🇫🇷'
+                        : (context.locale.languageCode == 'en' ? 'English 🇬🇧' : 'العربية 🇹🇳'),
+                    style: TextStyle(color: _textSecondary),
+                  ),
+                  trailing: Icon(Icons.chevron_right_rounded, color: _textSecondary),
+                  onTap: () => _showLanguageDialog(context),
+                ),
+                Divider(height: 1, indent: 64, color: _borderColor),
+                ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: _isDark ? const Color(0xFFD97706).withValues(alpha: 0.25) : const Color(0xFFFEF3C7),
+                    child: const Icon(Icons.brightness_6_rounded, color: Color(0xFFD97706)),
+                  ),
+                  title: Text('theme_mode'.tr(),
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14.5, color: _textPrimary)),
+                  subtitle: Builder(
+                    builder: (ctx) {
+                      final themeMode = Provider.of<ThemeProvider>(ctx).themeMode;
+                      return Text(
+                        themeMode == ThemeMode.system
+                            ? 'theme_system'.tr()
+                            : (themeMode == ThemeMode.light ? 'theme_light'.tr() : 'theme_dark'.tr()),
+                        style: TextStyle(color: _textSecondary),
+                      );
+                    },
+                  ),
+                  trailing: Icon(Icons.chevron_right_rounded, color: _textSecondary),
+                  onTap: () => _showThemeDialog(context),
+                ),
+                Divider(height: 1, indent: 64, color: _borderColor),
                 if (isSuperAdmin) ...[
-                  const Divider(height: 1, indent: 64),
+                  Divider(height: 1, indent: 64, color: _borderColor),
                   ListTile(
-                    leading: const CircleAvatar(
-                      backgroundColor: Color(0xFFE0E7FF),
-                      child: Icon(Icons.person_add_rounded, color: Color(0xFF4338CA)),
+                    leading: CircleAvatar(
+                      backgroundColor: _isDark ? const Color(0xFF4338CA).withValues(alpha: 0.25) : const Color(0xFFE0E7FF),
+                      child: const Icon(Icons.person_add_rounded, color: Color(0xFF4338CA)),
                     ),
-                    title: const Text('Créer un nouvel administrateur',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14.5)),
-                    subtitle: const Text('Ajouter un nouveau compte administrateur'),
-                    trailing: const Icon(Icons.chevron_right_rounded),
+                    title: Text('admin_create_admin'.tr(),
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14.5, color: _textPrimary)),
+                    subtitle: Text('admin_create_admin_sub'.tr(),
+                        style: TextStyle(color: _textSecondary)),
+                    trailing: Icon(Icons.chevron_right_rounded, color: _textSecondary),
                     onTap: _showNewAdminDialog,
                   ),
-                  const Divider(height: 1, indent: 64),
+                  Divider(height: 1, indent: 64, color: _borderColor),
                   ListTile(
-                    leading: const CircleAvatar(
-                      backgroundColor: Color(0xFFFEF3C7),
-                      child: Icon(Icons.tune_rounded, color: Color(0xFFD97706)),
+                    leading: CircleAvatar(
+                      backgroundColor: _isDark ? const Color(0xFFD97706).withValues(alpha: 0.25) : const Color(0xFFFEF3C7),
+                      child: const Icon(Icons.tune_rounded, color: Color(0xFFD97706)),
                     ),
-                    title: const Text('Paramètres globaux',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14.5)),
-                    subtitle: const Text('Maintenance, commissions et permissions'),
-                    trailing: const Icon(Icons.chevron_right_rounded),
+                    title: Text('admin_global_settings'.tr(),
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14.5, color: _textPrimary)),
+                    subtitle: Text('admin_global_settings_sub'.tr(),
+                        style: TextStyle(color: _textSecondary)),
+                    trailing: Icon(Icons.chevron_right_rounded, color: _textSecondary),
                     onTap: _showGlobalSettingsDialog,
                   ),
                 ],
@@ -3537,17 +3615,20 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
               width: double.infinity,
               height: 54,
               decoration: BoxDecoration(
-                color: const Color(0xFFFEE2E2),
+                color: _isDark ? const Color(0xFF450A0A) : const Color(0xFFFEE2E2),
                 borderRadius: BorderRadius.circular(18),
+                border: Border.all(
+                  color: _isDark ? const Color(0xFF7F1D1D) : const Color(0xFFFECACA),
+                ),
               ),
-              child: const Row(
+              child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.logout_rounded, color: Color(0xFFDC2626)),
-                  SizedBox(width: 8),
+                  const Icon(Icons.logout_rounded, color: Color(0xFFDC2626)),
+                  const SizedBox(width: 8),
                   Text(
-                    'Se déconnecter (Logout)',
-                    style: TextStyle(
+                    'admin_logout'.tr(),
+                    style: const TextStyle(
                       color: Color(0xFFDC2626),
                       fontSize: 15,
                       fontWeight: FontWeight.bold,
@@ -3562,7 +3643,180 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
       ),
     );
   }
-  // supervision
+  void _showLanguageDialog(BuildContext context) {
+    final currentCode = context.locale.languageCode;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    Widget buildLangTile(BuildContext ctx, String code, String name) {
+      final isSelected = currentCode == code;
+      return InkWell(
+        onTap: () async {
+          final newLoc = Locale(code);
+          await context.setLocale(newLoc);
+          if (context.mounted) {
+            try {
+              context.read<LocaleProvider>().setLocale(newLoc);
+            } catch (_) {}
+          }
+          if (ctx.mounted) Navigator.pop(ctx);
+        },
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          margin: const EdgeInsets.symmetric(vertical: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? (isDark ? const Color(0xFF0F2D2A) : const Color(0xFFE8F5F3))
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: isSelected ? const Color(0xFF0D544E) : Colors.transparent,
+              width: 1.2,
+            ),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  name,
+                  style: TextStyle(
+                    fontSize: 14.5,
+                    fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                    color: isDark ? Colors.white : const Color(0xFF0F172A),
+                  ),
+                ),
+              ),
+              if (isSelected)
+                const Icon(Icons.check_circle_rounded, color: Color(0xFF0D544E), size: 20),
+            ],
+          ),
+        ),
+      );
+    }
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text('choose_language'.tr()),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            buildLangTile(ctx, 'fr', 'Français 🇫🇷'),
+            buildLangTile(ctx, 'en', 'English 🇬🇧'),
+            buildLangTile(ctx, 'ar', 'العربية 🇹🇳'),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showThemeDialog(BuildContext context) {
+    final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    Widget buildAdminThemeOption({
+      required BuildContext ctx,
+      required ThemeMode mode,
+      required IconData icon,
+      required Color iconColor,
+      required String title,
+      String? subtitle,
+    }) {
+      final isSelected = themeProvider.themeMode == mode;
+      return InkWell(
+        onTap: () {
+          themeProvider.setThemeMode(mode);
+          Navigator.pop(ctx);
+        },
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          margin: const EdgeInsets.symmetric(vertical: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? (isDark ? const Color(0xFF0F2D2A) : const Color(0xFFE8F5F3))
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: isSelected ? const Color(0xFF0D544E) : Colors.transparent,
+              width: 1.2,
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(icon, color: iconColor, size: 22),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                        fontSize: 14,
+                        color: isDark ? Colors.white : const Color(0xFF0F172A),
+                      ),
+                    ),
+                    if (subtitle != null && subtitle.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle,
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              if (isSelected)
+                const Icon(Icons.check_circle_rounded, color: Color(0xFF0D544E), size: 20),
+            ],
+          ),
+        ),
+      );
+    }
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text('theme_choose'.tr()),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            buildAdminThemeOption(
+              ctx: ctx,
+              mode: ThemeMode.system,
+              icon: Icons.brightness_auto_rounded,
+              iconColor: const Color(0xFF64748B),
+              title: 'theme_system'.tr(),
+              subtitle: 'theme_subtitle_system'.tr(),
+            ),
+            buildAdminThemeOption(
+              ctx: ctx,
+              mode: ThemeMode.light,
+              icon: Icons.light_mode_rounded,
+              iconColor: const Color(0xFFE05D38),
+              title: 'theme_light'.tr(),
+            ),
+            buildAdminThemeOption(
+              ctx: ctx,
+              mode: ThemeMode.dark,
+              icon: Icons.dark_mode_rounded,
+              iconColor: const Color(0xFF6366F1),
+              title: 'theme_dark'.tr(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ================= TAB 5: SUPERVISION =================
   Widget _buildSupervisionTab() {
     return Padding(
       padding: const EdgeInsets.all(18),
@@ -3571,12 +3825,12 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
         children: [
           Row(
             children: [
-              const Text(
-                'Supervision & Alertes',
+              Text(
+                'admin_supervision'.tr(),
                 style: TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFF0F172A),
+                  color: _textPrimary,
                   letterSpacing: -0.4,
                 ),
               ),
@@ -3584,7 +3838,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
               Container(
                 padding: const EdgeInsets.all(3),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFE2E8F0),
+                  color: _isDark ? const Color(0xFF0F172A) : const Color(0xFFE2E8F0),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Row(
@@ -3626,9 +3880,9 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                     builder: (context, snapshot) {
                       final logs = snapshot.data ?? [];
                       if (logs.isEmpty) {
-                        return const Center(
+                        return Center(
                           child: Text(
-                            'Aucun journal de sécurité enregistré.',
+                            'admin_no_security_logs'.tr(),
                             style: TextStyle(color: Color(0xFF94A3B8)),
                           ),
                         );
@@ -3644,9 +3898,9 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                             margin: const EdgeInsets.only(bottom: 10),
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: Colors.white,
+                              color: _cardBg,
                               borderRadius: BorderRadius.circular(14),
-                              border: Border.all(color: const Color(0xFFE2E8F0)),
+                              border: Border.all(color: _borderColor),
                             ),
                             child: Row(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -3666,18 +3920,18 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                                         children: [
                                           Text(
                                             action,
-                                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: _textPrimary),
                                           ),
                                           Text(
                                             actor,
-                                            style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+                                            style: TextStyle(fontSize: 11, color: _textSecondary),
                                           ),
                                         ],
                                       ),
                                       const SizedBox(height: 3),
                                       Text(
                                         details,
-                                        style: const TextStyle(fontSize: 12, color: Color(0xFF475569)),
+                                        style: TextStyle(fontSize: 12, color: _textSecondary),
                                       ),
                                     ],
                                   ),
@@ -3701,7 +3955,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          color: isSelected ? Colors.white : Colors.transparent,
+          color: isSelected ? (_isDark ? const Color(0xFF334155) : Colors.white) : Colors.transparent,
           borderRadius: BorderRadius.circular(8),
         ),
         child: Text(
@@ -3709,7 +3963,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
           style: TextStyle(
             fontSize: 12,
             fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-            color: isSelected ? const Color(0xFF0F172A) : const Color(0xFF64748B),
+            color: isSelected ? _textPrimary : _textSecondary,
           ),
         ),
       ),
@@ -3725,9 +3979,9 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: _cardBg,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: _borderColor),
       ),
       child: Row(
         children: [
@@ -3737,10 +3991,10 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+                Text(title, style: TextStyle(fontWeight: FontWeight.bold, color: _textPrimary)),
                 const SizedBox(height: 2),
                 Text(subtitle,
-                    style: const TextStyle(color: Color(0xFF64748B), fontSize: 12)),
+                    style: TextStyle(color: _textSecondary, fontSize: 12)),
               ],
             ),
           ),

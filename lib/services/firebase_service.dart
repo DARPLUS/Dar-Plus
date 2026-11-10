@@ -1,8 +1,10 @@
-﻿import 'dart:math';
+import 'dart:io';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import '../firebase_options.dart';
 import 'notification_service.dart';
 import 'email_service.dart';
@@ -150,6 +152,8 @@ class FirebaseService {
         _isFirebaseInitialized = true;
       }
       debugPrint('Firebase connecté avec succès au projet darplus-edfbe !');
+      // Ensemencer les pros dans Firestore si vide
+      _seedDefaultProsToFirestore();
     } catch (e) {
       debugPrint('Erreur initialisation Firebase: $e');
       _isFirebaseInitialized = false;
@@ -1018,6 +1022,7 @@ class FirebaseService {
     String? phone,
     String? email,
     String? photoBase64,
+    String? photoUrl,
   }) async {
     try {
       if (_isFirebaseInitialized) {
@@ -1035,6 +1040,14 @@ class FirebaseService {
           if (phone != null) updates['phone'] = phone.trim();
           if (email != null) updates['email'] = email.trim();
           if (photoBase64 != null) updates['photoBase64'] = photoBase64;
+          if (photoUrl != null) {
+            updates['photoUrl'] = photoUrl;
+            // Clear old base64 data when a proper URL is set
+            updates['photoBase64'] = FieldValue.delete();
+            try {
+              await user.updatePhotoURL(photoUrl);
+            } catch (_) {}
+          }
 
           await FirebaseFirestore.instance.collection('users').doc(user.uid).set(
                 updates,
@@ -1047,6 +1060,37 @@ class FirebaseService {
     } catch (e) {
       debugPrint('Erreur mise à jour profil: $e');
       return false;
+    }
+  }
+
+  /// Upload profile image to Firebase Storage and return download URL
+  Future<String?> uploadProfileImage(File imageFile) async {
+    try {
+      if (!_isFirebaseInitialized) return null;
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return null;
+
+      final storageRef = FirebaseStorage.instance
+          .ref()
+          .child('profile_photos')
+          .child('${user.uid}.jpg');
+
+      // Upload with metadata
+      final metadata = SettableMetadata(
+        contentType: 'image/jpeg',
+        customMetadata: {'uploadedBy': user.uid},
+      );
+
+      await storageRef.putFile(imageFile, metadata);
+      final downloadUrl = await storageRef.getDownloadURL();
+
+      // Update user document with the URL
+      await updateCurrentUserData(photoUrl: downloadUrl);
+
+      return downloadUrl;
+    } catch (e) {
+      debugPrint('Erreur upload image profil: $e');
+      return null;
     }
   }
 
@@ -1795,5 +1839,645 @@ class FirebaseService {
       default:
         return 'Erreur d\'authentification ($code).';
     }
+  }
+
+  // ================= PARCOURS RECHERCHE, CATALOGUE & DÉTAIL PROS =================
+
+  static final List<Map<String, dynamic>> _defaultPros = [
+    {
+      'id': 'pro_1',
+      'name': 'Foued Trabelsi',
+      'serviceType': 'Plomberie',
+      'rating': 4.9,
+      'reviewsCount': 124,
+      'price': '35 TND/h',
+      'priceValue': 35,
+      'location': 'El Menzah 9',
+      'distance': '1.2 km',
+      'available': true,
+      'avatarAsset': 'assets/images/slide_1_photo.png',
+      'phone': '+216 98 123 456',
+      'email': 'foued.plombier@gmail.com',
+      'experienceYears': 12,
+      'bio': 'Artisan plombier certifié avec 12 ans d\'expérience. Dépannage rapide 7j/7, recherche de fuites, débouchage et installation sanitaire.',
+      'specialties': ['Débouchage', 'Chauffe-eau', 'Fuites d\'eau', 'Rénovation SDB'],
+      'badges': ['Vérifié DAR+', 'Top Artisan', 'Garantie 6 mois'],
+    },
+    {
+      'id': 'pro_2',
+      'name': 'Karim Ben Ammar',
+      'serviceType': 'Électricité',
+      'rating': 4.8,
+      'reviewsCount': 98,
+      'price': '40 TND/h',
+      'priceValue': 40,
+      'location': 'La Marsa',
+      'distance': '2.5 km',
+      'available': true,
+      'avatarAsset': 'assets/images/slide_2_photo.png',
+      'phone': '+216 22 789 012',
+      'email': 'karim.elec@gmail.com',
+      'experienceYears': 8,
+      'bio': 'Électricien qualifié pour vos installations et mises aux normes électriques. Diagnostic rapide et devis gratuit.',
+      'specialties': ['Tableaux électriques', 'Court-circuit', 'Éclairage LED', 'Prises & Câblage'],
+      'badges': ['Vérifié DAR+', 'Électricien Agréé'],
+    },
+    {
+      'id': 'pro_3',
+      'name': 'Sami Gharbi',
+      'serviceType': 'Climatisation',
+      'rating': 4.7,
+      'reviewsCount': 76,
+      'price': '50 TND/h',
+      'priceValue': 50,
+      'location': 'Ennasr 2',
+      'distance': '3.1 km',
+      'available': true,
+      'avatarAsset': 'assets/images/slide_3_photo.png',
+      'phone': '+216 55 345 678',
+      'email': 'sami.clim@gmail.com',
+      'experienceYears': 10,
+      'bio': 'Spécialiste climatisation et froid. Entretien préventif, recharge gaz R410/R32 et installation multi-split.',
+      'specialties': ['Entretien & Nettoyage', 'Recharge Fréon', 'Installation Split', 'Dépannage Urgent'],
+      'badges': ['Vérifié DAR+', 'Intervention Express'],
+    },
+    {
+      'id': 'pro_4',
+      'name': 'Moncef Jaziri',
+      'serviceType': 'Peinture',
+      'rating': 4.6,
+      'reviewsCount': 62,
+      'price': '30 TND/h',
+      'priceValue': 30,
+      'location': 'Ariana Ville',
+      'distance': '4.0 km',
+      'available': false,
+      'avatarAsset': 'assets/images/slide_1_photo.png',
+      'phone': '+216 20 555 444',
+      'email': 'moncef.peinture@gmail.com',
+      'experienceYears': 15,
+      'bio': 'Artisan peintre en bâtiment, décoration intérieure et traitement anti-humidité. Travail soigné et finitions parfaites.',
+      'specialties': ['Peinture Murale', 'Enduit & Ponçage', 'Anti-Humidité', 'Décoration Stuc'],
+      'badges': ['Vérifié DAR+'],
+    },
+    {
+      'id': 'pro_5',
+      'name': 'Yassine Messaoudi',
+      'serviceType': 'Menuiserie',
+      'rating': 4.9,
+      'reviewsCount': 110,
+      'price': '45 TND/h',
+      'priceValue': 45,
+      'location': 'Carthage',
+      'distance': '5.2 km',
+      'available': true,
+      'avatarAsset': 'assets/images/slide_2_photo.png',
+      'phone': '+216 97 888 999',
+      'email': 'yassine.bois@gmail.com',
+      'experienceYears': 9,
+      'bio': 'Menuisier ébéniste expérimenté. Conception de meubles sur mesure, réparation de portes, placards et parquets.',
+      'specialties': ['Portes & Serrures', 'Placards sur mesure', 'Parquet', 'Cuisines'],
+      'badges': ['Vérifié DAR+', 'Artisan d\'Or'],
+    },
+  ];
+
+  /// Stream des professionnels avec filtres optionnels (catégorie, recherche textuelle, disponibilité)
+  Stream<List<Map<String, dynamic>>> streamPros({
+    String? category,
+    String? searchQuery,
+    bool? onlyAvailable,
+    String? sortBy, // 'rating', 'price_asc', 'price_desc'
+  }) {
+    if (_isFirebaseInitialized) {
+      return FirebaseFirestore.instance
+          .collection('users')
+          .where('role', isEqualTo: 'professionnel')
+          .where('isApproved', isEqualTo: true)
+          .snapshots()
+          .map((snapshot) {
+        List<Map<String, dynamic>> list = snapshot.docs.map((doc) {
+          final data = doc.data();
+          return {
+            'id': doc.id,
+            'name': data['fullName'] ?? 'Artisan',
+            'serviceType': data['serviceType'] ?? 'Services divers',
+            'rating': (data['rating'] is num) ? (data['rating'] as num).toDouble() : 4.8,
+            'reviewsCount': data['reviewsCount'] ?? 15,
+            'price': data['price'] ?? '35 TND/h',
+            'priceValue': data['priceValue'] ?? 35,
+            'location': data['location'] ?? 'Grand Tunis',
+            'distance': data['distance'] ?? '2.0 km',
+            'available': data['available'] ?? true,
+            'phone': data['phone'] ?? '+216 -- --- ---',
+            'email': data['email'] ?? '',
+            'bio': data['bio'] ?? 'Professionnel vérifié et certifié par DAR PLUS.',
+            'specialties': data['specialties'] ?? [data['serviceType'] ?? 'Artisan'],
+            'badges': ['Vérifié DAR+'],
+            'photoBase64': data['photoBase64'] ?? '',
+          };
+        }).toList();
+
+        // Si Firestore est vide pour les pros, combiner avec les profils par défaut
+        if (list.isEmpty) {
+          list = List.from(_defaultPros);
+        }
+
+        return _applyFilters(list, category, searchQuery, onlyAvailable, sortBy);
+      });
+    }
+
+    // Fallback Local
+    return Stream.value(
+      _applyFilters(List.from(_defaultPros), category, searchQuery, onlyAvailable, sortBy),
+    );
+  }
+
+  List<Map<String, dynamic>> _applyFilters(
+    List<Map<String, dynamic>> list,
+    String? category,
+    String? searchQuery,
+    bool? onlyAvailable,
+    String? sortBy,
+  ) {
+    var filtered = list;
+
+    if (category != null && category.isNotEmpty && category.toLowerCase() != 'tous') {
+      filtered = filtered
+          .where((p) => (p['serviceType'] as String)
+              .toLowerCase()
+              .contains(category.toLowerCase()))
+          .toList();
+    }
+
+    if (searchQuery != null && searchQuery.trim().isNotEmpty) {
+      final q = searchQuery.trim().toLowerCase();
+      filtered = filtered.where((p) {
+        final name = (p['name'] as String).toLowerCase();
+        final type = (p['serviceType'] as String).toLowerCase();
+        final bio = (p['bio'] as String? ?? '').toLowerCase();
+        return name.contains(q) || type.contains(q) || bio.contains(q);
+      }).toList();
+    }
+
+    if (onlyAvailable == true) {
+      filtered = filtered.where((p) => p['available'] == true).toList();
+    }
+
+    if (sortBy == 'rating') {
+      filtered.sort((a, b) => (b['rating'] as num).compareTo(a['rating'] as num));
+    } else if (sortBy == 'price_asc') {
+      filtered.sort((a, b) => (a['priceValue'] as num).compareTo(b['priceValue'] as num));
+    } else if (sortBy == 'price_desc') {
+      filtered.sort((a, b) => (b['priceValue'] as num).compareTo(a['priceValue'] as num));
+    }
+
+    return filtered;
+  }
+
+  // ================= GESTION RÉELLE DES RÉSERVATIONS (COLLECTION 'bookings') =================
+
+  static final List<Map<String, dynamic>> _localBookings = [];
+
+  /// Créer une vraie réservation dans Firestore
+  Future<Map<String, dynamic>> createBooking({
+    required String proId,
+    required String proName,
+    required String proPhone,
+    required String serviceType,
+    required String price,
+    required String address,
+    required String description,
+    String? scheduledDate,
+  }) async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      final clientId = user?.uid ?? 'client_anon';
+      final clientEmail = user?.email ?? '';
+      
+      // Récupérer le nom réel du client depuis Firestore ou le profil local
+      String clientName = 'Client';
+      String clientPhone = '';
+      final userData = await getCurrentUserData();
+      if (userData != null) {
+        clientName = userData['fullName'] as String? ?? 'Client';
+        clientPhone = userData['phone'] as String? ?? '';
+      }
+
+      final bookingData = {
+        'clientId': clientId,
+        'clientName': clientName,
+        'clientEmail': clientEmail,
+        'clientPhone': clientPhone,
+        'proId': proId,
+        'proName': proName,
+        'proPhone': proPhone,
+        'serviceType': serviceType,
+        'price': price,
+        'address': address.trim(),
+        'description': description.trim(),
+        'scheduledDate': scheduledDate ?? 'Dès que possible',
+        'status': 'en_attente', // 'en_attente', 'confirmee', 'terminee', 'annulee'
+        'createdAt': FieldValue.serverTimestamp(),
+      };
+
+      if (_isFirebaseInitialized) {
+        final docRef = await FirebaseFirestore.instance.collection('bookings').add(bookingData);
+        bookingData['id'] = docRef.id;
+        _localBookings.insert(0, Map<String, dynamic>.from(bookingData));
+
+        // Journal de sécurité
+        await logSecurityEvent(
+          action: 'CREATE_BOOKING',
+          actorEmail: clientEmail.isNotEmpty ? clientEmail : 'Client',
+          target: proName,
+          details: 'Réservation $serviceType créée pour $proName par $clientName (ID: ${docRef.id})',
+        );
+
+        // Notification in-app pour le pro
+        try {
+          await FirebaseFirestore.instance
+              .collection('notifications')
+              .add({
+            'recipientId': proId,
+            'type': 'new_booking',
+            'title': '🔔 Nouvelle demande de service',
+            'body': '$clientName demande "$serviceType" — $serviceType',
+            'bookingId': docRef.id,
+            'clientName': clientName,
+            'serviceType': serviceType,
+            'isRead': false,
+            'createdAt': FieldValue.serverTimestamp(),
+          });
+        } catch (_) {}
+
+        return {'success': true, 'id': docRef.id, 'message': 'Réservation créée avec succès !'};
+      } else {
+        final mockId = 'booking_${DateTime.now().millisecondsSinceEpoch}';
+        bookingData['id'] = mockId;
+        _localBookings.insert(0, Map<String, dynamic>.from(bookingData));
+        return {'success': true, 'id': mockId, 'message': 'Réservation créée (Mode local)'};
+      }
+    } catch (e) {
+      debugPrint('Erreur createBooking: $e');
+      return {'success': false, 'message': 'Erreur lors de la réservation : $e'};
+    }
+  }
+
+  /// Écoute en temps réel des réservations du client connecté
+  Stream<List<Map<String, dynamic>>> streamClientBookings({String? statusFilter}) {
+    final user = FirebaseAuth.instance.currentUser;
+    final clientId = user?.uid;
+
+    if (_isFirebaseInitialized && clientId != null) {
+      Query query = FirebaseFirestore.instance
+          .collection('bookings')
+          .where('clientId', isEqualTo: clientId);
+
+      return query.snapshots().map((snapshot) {
+        var list = snapshot.docs.map((doc) {
+          final data = doc.data() as Map<String, dynamic>;
+          data['id'] = doc.id;
+          return data;
+        }).toList();
+
+        // Tri par date
+        list.sort((a, b) {
+          final aDate = a['createdAt'];
+          final bDate = b['createdAt'];
+          if (aDate is Timestamp && bDate is Timestamp) {
+            return bDate.compareTo(aDate);
+          }
+          return 0;
+        });
+
+        if (statusFilter != null && statusFilter.isNotEmpty && statusFilter != 'Toutes') {
+          final filterNorm = _normalizeStatus(statusFilter);
+          list = list.where((b) => _normalizeStatus(b['status'] as String? ?? '') == filterNorm).toList();
+        }
+
+        return list;
+      });
+    }
+
+    // Fallback local en mémoire
+    var list = List<Map<String, dynamic>>.from(_localBookings);
+    if (statusFilter != null && statusFilter.isNotEmpty && statusFilter != 'Toutes') {
+      final filterNorm = _normalizeStatus(statusFilter);
+      list = list.where((b) => _normalizeStatus(b['status'] as String? ?? '') == filterNorm).toList();
+    }
+    return Stream.value(list);
+  }
+
+  /// Écoute en temps réel des réservations reçues par un professionnel
+  Stream<List<Map<String, dynamic>>> streamProBookings({String? statusFilter}) {
+    final user = FirebaseAuth.instance.currentUser;
+    final proId = user?.uid;
+
+    String fmtDate(dynamic ts) {
+      if (ts is Timestamp) {
+        final dt = ts.toDate();
+        final now = DateTime.now();
+        if (dt.year == now.year && dt.month == now.month && dt.day == now.day) {
+          return 'Auj. ${dt.hour.toString().padLeft(2,'0')}:${dt.minute.toString().padLeft(2,'0')}';
+        }
+        final diff = dt.difference(now);
+        if (diff.inDays == 1) return 'Demain ${dt.hour.toString().padLeft(2,'0')}:${dt.minute.toString().padLeft(2,'0')}';
+        return '${dt.day.toString().padLeft(2,'0')}/${dt.month.toString().padLeft(2,'0')} ${dt.hour.toString().padLeft(2,'0')}:${dt.minute.toString().padLeft(2,'0')}';
+      }
+      return '';
+    }
+
+    if (_isFirebaseInitialized && proId != null) {
+      Query query = FirebaseFirestore.instance
+          .collection('bookings')
+          .where('proId', isEqualTo: proId);
+
+      return query.snapshots().map((snapshot) {
+        var list = snapshot.docs.map((d) {
+          final data = d.data() as Map<String, dynamic>;
+          data['id'] = d.id;
+          data['dateLabel'] = fmtDate(data['scheduledDate'] ?? data['createdAt']);
+          return data;
+        }).toList();
+
+        list.sort((a, b) {
+          final aDate = a['createdAt'];
+          final bDate = b['createdAt'];
+          if (aDate is Timestamp && bDate is Timestamp) return bDate.compareTo(aDate);
+          return 0;
+        });
+
+        if (statusFilter != null && statusFilter.isNotEmpty) {
+          final f = _normalizeStatus(statusFilter);
+          list = list.where((b) => _normalizeStatus(b['status'] as String? ?? '') == f).toList();
+        }
+        return list;
+      });
+    }
+
+    // Fallback local (bookings dont proId correspond)
+    var list = _localBookings
+        .where((b) => proId == null || b['proId'] == proId)
+        .map((b) {
+          final copy = Map<String, dynamic>.from(b);
+          copy['dateLabel'] = copy['scheduledDate'] ?? '';
+          return copy;
+        })
+        .toList();
+    if (statusFilter != null && statusFilter.isNotEmpty) {
+      final f = _normalizeStatus(statusFilter);
+      list = list.where((b) => _normalizeStatus(b['status'] as String? ?? '') == f).toList();
+    }
+    return Stream.value(list);
+  }
+
+  /// Met à jour le statut d'une réservation (pro accepte / refuse)
+  Future<bool> updateBookingStatus(String bookingId, String newStatus) async {
+    try {
+      if (_isFirebaseInitialized) {
+        await FirebaseFirestore.instance
+            .collection('bookings')
+            .doc(bookingId)
+            .update({
+          'status': newStatus,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      }
+      final idx = _localBookings.indexWhere((b) => b['id'] == bookingId);
+      if (idx != -1) _localBookings[idx]['status'] = newStatus;
+      return true;
+    } catch (e) {
+      debugPrint('Erreur updateBookingStatus: $e');
+      return false;
+    }
+  }
+
+  /// Écoute en temps réel des avis d'un professionnel
+  Stream<List<Map<String, dynamic>>> streamReviews(String proId) {
+    if (_isFirebaseInitialized) {
+      return FirebaseFirestore.instance
+          .collection('reviews')
+          .where('proId', isEqualTo: proId)
+          .orderBy('createdAt', descending: true)
+          .limit(10)
+          .snapshots()
+          .map((snap) => snap.docs.map((d) {
+                final data = d.data();
+                data['id'] = d.id;
+                final ts = data['createdAt'];
+                if (ts is Timestamp) {
+                  final dt = ts.toDate();
+                  final diff = DateTime.now().difference(dt);
+                  if (diff.inDays == 0) {
+                    data['dateLabel'] = "Aujourd'hui";
+                  } else if (diff.inDays == 1) {
+                    data['dateLabel'] = 'Hier';
+                  } else if (diff.inDays < 7) {
+                    data['dateLabel'] = 'Il y a ${diff.inDays} jours';
+                  } else if (diff.inDays < 30) {
+                    data['dateLabel'] = 'Il y a ${diff.inDays ~/ 7} semaine(s)';
+                  } else {
+                    data['dateLabel'] = 'Il y a ${diff.inDays ~/ 30} mois';
+                  }
+                } else {
+                  data['dateLabel'] = '';
+                }
+                return data;
+              }).toList());
+    }
+    return Stream.value([]);
+  }
+
+  /// Annuler une réservation
+  Future<bool> cancelBooking(String bookingId) async {
+    try {
+      if (_isFirebaseInitialized) {
+        await FirebaseFirestore.instance
+            .collection('bookings')
+            .doc(bookingId)
+            .update({'status': 'annulee', 'cancelledAt': FieldValue.serverTimestamp()});
+      }
+      final index = _localBookings.indexWhere((b) => b['id'] == bookingId);
+      if (index != -1) {
+        _localBookings[index]['status'] = 'annulee';
+      }
+      return true;
+    } catch (e) {
+      debugPrint('Erreur cancelBooking: $e');
+      return false;
+    }
+  }
+
+  String _normalizeStatus(String raw) {
+    final lower = raw.trim().toLowerCase();
+    if (lower.contains('attente') || lower.contains('pending')) return 'en_attente';
+    if (lower.contains('confirm') || lower.contains('accept')) return 'confirmee';
+    if (lower.contains('termin') || lower.contains('complet')) return 'terminee';
+    if (lower.contains('annul') || lower.contains('cancel')) return 'annulee';
+    return lower;
+  }
+
+  Future<void> _seedDefaultProsToFirestore() async {
+    try {
+      if (!_isFirebaseInitialized) return;
+      final snap = await FirebaseFirestore.instance
+          .collection('users')
+          .where('role', isEqualTo: 'professionnel')
+          .limit(1)
+          .get();
+
+      if (snap.docs.isEmpty) {
+        debugPrint('Ensemencement des professionnels initiaux dans Firestore...');
+        final batch = FirebaseFirestore.instance.batch();
+        for (final pro in _defaultPros) {
+          final doc = FirebaseFirestore.instance.collection('users').doc(pro['id'] as String);
+          batch.set(doc, {
+            'fullName': pro['name'],
+            'email': pro['email'],
+            'phone': pro['phone'],
+            'role': 'professionnel',
+            'serviceType': pro['serviceType'],
+            'rating': pro['rating'],
+            'reviewsCount': pro['reviewsCount'],
+            'price': pro['price'],
+            'priceValue': pro['priceValue'],
+            'location': pro['location'],
+            'distance': pro['distance'],
+            'available': pro['available'],
+            'bio': pro['bio'],
+            'specialties': pro['specialties'],
+            'isActive': true,
+            'isApproved': true,
+            'createdAt': FieldValue.serverTimestamp(),
+          });
+        }
+        await batch.commit();
+        debugPrint('Professionnels ensemencés avec succès dans Firestore !');
+      }
+    } catch (e) {
+      debugPrint('Note: ensemencement pros non bloquant: $e');
+    }
+  }
+
+  // ================= GESTION RÉELLE DES FAVORIS CLIENT =================
+
+  static final Set<String> _localFavoriteIds = {};
+  static final List<Map<String, dynamic>> _localFavoritesList = [];
+
+  /// Vérifie si un professionnel est dans les favoris
+  Future<bool> isFavorite(String proId) async {
+    try {
+      if (_isFirebaseInitialized) {
+        final user = FirebaseAuth.instance.currentUser;
+        final clientId = user?.uid;
+        if (clientId != null) {
+          final doc = await FirebaseFirestore.instance
+              .collection('users')
+              .doc(clientId)
+              .collection('favorites')
+              .doc(proId)
+              .get();
+          if (doc.exists) {
+            _localFavoriteIds.add(proId);
+            return true;
+          } else {
+            _localFavoriteIds.remove(proId);
+            return false;
+          }
+        }
+      }
+      return _localFavoriteIds.contains(proId);
+    } catch (_) {
+      return _localFavoriteIds.contains(proId);
+    }
+  }
+
+  /// Basculer l'état favori d'un artisan (Ajout / Suppression)
+  /// Retourne `true` s'il est désormais favori, `false` s'il a été retiré.
+  Future<bool> toggleFavorite(Map<String, dynamic> pro) async {
+    try {
+      final proId = (pro['id'] ?? pro['uid'] ?? 'pro_${pro['name']}').toString();
+      String clientId = 'client_anon';
+      if (_isFirebaseInitialized) {
+        final user = FirebaseAuth.instance.currentUser;
+        if (user != null) clientId = user.uid;
+      }
+
+      final bool currentlyFav = await isFavorite(proId);
+      final bool newStatus = !currentlyFav;
+
+      if (newStatus) {
+        _localFavoriteIds.add(proId);
+        _localFavoritesList.removeWhere((p) => (p['id'] ?? p['uid']) == proId);
+        _localFavoritesList.insert(0, Map<String, dynamic>.from(pro));
+      } else {
+        _localFavoriteIds.remove(proId);
+        _localFavoritesList.removeWhere((p) => (p['id'] ?? p['uid']) == proId);
+      }
+
+      if (_isFirebaseInitialized && clientId != 'client_anon') {
+        final favRef = FirebaseFirestore.instance
+            .collection('users')
+            .doc(clientId)
+            .collection('favorites')
+            .doc(proId);
+
+        if (newStatus) {
+          await favRef.set({
+            ...pro,
+            'id': proId,
+            'favoritedAt': FieldValue.serverTimestamp(),
+          });
+        } else {
+          await favRef.delete();
+        }
+      }
+
+      return newStatus;
+    } catch (e) {
+      debugPrint('Erreur toggleFavorite: $e');
+      final proId = (pro['id'] ?? pro['uid'] ?? '').toString();
+      if (_localFavoriteIds.contains(proId)) {
+        _localFavoriteIds.remove(proId);
+        _localFavoritesList.removeWhere((p) => (p['id'] ?? p['uid']) == proId);
+        return false;
+      } else {
+        _localFavoriteIds.add(proId);
+        _localFavoritesList.insert(0, Map<String, dynamic>.from(pro));
+        return true;
+      }
+    }
+  }
+
+  /// Écoute en temps réel la liste des artisans favoris du client
+  Stream<List<Map<String, dynamic>>> streamFavorites() {
+    String? clientId;
+    if (_isFirebaseInitialized) {
+      final user = FirebaseAuth.instance.currentUser;
+      clientId = user?.uid;
+    }
+
+    if (_isFirebaseInitialized && clientId != null) {
+      return FirebaseFirestore.instance
+          .collection('users')
+          .doc(clientId)
+          .collection('favorites')
+          .snapshots()
+          .map((snapshot) {
+        final list = snapshot.docs.map((doc) {
+          final data = doc.data();
+          data['id'] = doc.id;
+          return data;
+        }).toList();
+
+        _localFavoriteIds.clear();
+        for (final item in list) {
+          _localFavoriteIds.add(item['id'].toString());
+        }
+        return list;
+      });
+    }
+
+    return Stream.value(List<Map<String, dynamic>>.from(_localFavoritesList));
   }
 }

@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:easy_localization/easy_localization.dart';
+import 'package:provider/provider.dart';
+import '../providers/theme_provider.dart';
+import '../providers/locale_provider.dart';
 import '../services/firebase_service.dart';
 import '../services/notification_service.dart';
 import 'login_screen.dart';
@@ -113,7 +117,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     if (_accountType == AccountType.client) {
       // 1. Inscription CLIENT dans Firebase
-      final phone = _phoneController.text.trim();
+      final phone = _phoneController.text.trim().isNotEmpty
+          ? _phoneController.text.trim()
+          : '+216 50 000 000';
 
       final result = await firebaseService.registerClient(
         fullName: _fullNameController.text,
@@ -521,8 +527,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   @override
   Widget build(BuildContext context) {
+    context.watch<ThemeProvider>();
+    context.watch<LocaleProvider>();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardBg = isDark ? const Color(0xFF1E293B) : Colors.white;
+    final inputBorderColor = isDark ? const Color(0xFF334155) : const Color(0xFFDDE3EA);
+    final textColor = isDark ? Colors.white : const Color(0xFF0F172A);
+    final subColor = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+    final scaffoldBg = isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC);
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: scaffoldBg,
       body: SafeArea(
         top: true,
         child: SingleChildScrollView(
@@ -550,9 +565,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         width: 44,
                         height: 44,
                         decoration: BoxDecoration(
-                          color: Colors.white,
+                          color: cardBg,
                           borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                          border: Border.all(color: inputBorderColor),
                           boxShadow: [
                             BoxShadow(
                               color: Colors.black.withValues(alpha: 0.03),
@@ -562,9 +577,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           ],
                         ),
                         alignment: Alignment.center,
-                        child: const Icon(
+                        child: Icon(
                           Icons.chevron_left_rounded,
-                          color: Color(0xFF0F172A),
+                          color: textColor,
                           size: 28,
                         ),
                       ),
@@ -585,21 +600,21 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 const SizedBox(height: 22),
 
                 // 2. Titre & Sous-titre (Exactement comme le screenshot)
-                const Text(
-                  'Créer un compte',
+                Text(
+                  'register_title'.tr(),
                   style: TextStyle(
                     fontSize: 28,
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFF0F172A),
+                    color: textColor,
                     letterSpacing: -0.5,
                   ),
                 ),
                 const SizedBox(height: 6),
-                const Text(
-                  'Rejoignez Dar Plus en quelques secondes.',
+                Text(
+                  'register_subtitle'.tr(),
                   style: TextStyle(
                     fontSize: 14.5,
-                    color: Color(0xFF64748B),
+                    color: subColor,
                     fontWeight: FontWeight.w400,
                   ),
                 ),
@@ -611,13 +626,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   height: 52,
                   padding: const EdgeInsets.all(4),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFE6EEEC),
+                    color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE6EEEC),
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: Row(
                     children: [
                       _buildSegmentTab(
-                        title: 'Client',
+                        title: 'role_client_tab'.tr(),
                         icon: Icons.person_outline_rounded,
                         isSelected: _accountType == AccountType.client,
                         onTap: () {
@@ -627,7 +642,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         },
                       ),
                       _buildSegmentTab(
-                        title: 'Professionnel',
+                        title: 'role_pro_tab'.tr(),
                         icon: Icons.build_outlined,
                         isSelected: _accountType == AccountType.professionnel,
                         onTap: () {
@@ -643,10 +658,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 const SizedBox(height: 22),
 
                 // 4. Champ : Nom complet
-                _buildFieldLabel('Nom complet'),
+                _buildFieldLabel('fullname_label'.tr()),
                 _buildCustomTextField(
                   controller: _fullNameController,
-                  hintText: 'Nom complet',
+                  hintText: 'fullname_hint'.tr(),
                   validator: (v) =>
                       v == null || v.trim().isEmpty ? 'Veuillez saisir votre nom complet' : null,
                 ),
@@ -654,56 +669,40 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 const SizedBox(height: 18),
 
                 // 5. Champ : Adresse e-mail
-                _buildFieldLabel('Adresse e-mail'),
+                _buildFieldLabel('email_label'.tr()),
                 _buildCustomTextField(
                   controller: _emailController,
-                  hintText: 'Email',
+                  hintText: 'email_hint'.tr(),
                   keyboardType: TextInputType.emailAddress,
                   validator: (v) =>
                       v == null || !v.contains('@') ? 'Veuillez saisir une adresse e-mail valide' : null,
                 ),
 
-                if (_accountType == AccountType.client) ...[
-                  const SizedBox(height: 18),
-                  _buildFieldLabel('Numéro de téléphone'),
-                  _buildCustomTextField(
-                    controller: _phoneController,
-                    hintText: '+216',
-                    keyboardType: TextInputType.phone,
-                    validator: (v) {
-                      final digits = (v ?? '').replaceAll(RegExp(r'\D'), '');
-                      if (digits.length < 8) {
-                        return 'Veuillez saisir un numéro de téléphone valide';
-                      }
-                      return null;
-                    },
-                  ),
-                ],
-
                 // Si Professionnel : Spécialité et Téléphone pro
                 if (_accountType == AccountType.professionnel) ...[
                   const SizedBox(height: 18),
-                  _buildFieldLabel('Spécialité / Métier'),
+                  _buildFieldLabel('specialty_label'.tr()),
                   Container(
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: cardBg,
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: const Color(0xFFDDE3EA), width: 1.2),
+                      border: Border.all(color: inputBorderColor, width: 1.2),
                     ),
                     child: DropdownButtonFormField<String>(
                       initialValue: _selectedServiceType,
-                      decoration: const InputDecoration(
-                        prefixIcon: Icon(Icons.handyman_outlined, color: Color(0xFF0D544E), size: 20),
+                      dropdownColor: cardBg,
+                      decoration: InputDecoration(
+                        prefixIcon: const Icon(Icons.handyman_outlined, color: Color(0xFF0D544E), size: 20),
                         border: InputBorder.none,
-                        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                       ),
-                      hint: const Text(
-                        'Sélectionnez votre métier',
-                        style: TextStyle(color: Color(0xFF94A3B8), fontSize: 14.5),
+                      hint: Text(
+                        'select_specialty_hint'.tr(),
+                        style: TextStyle(color: isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8), fontSize: 14.5),
                       ),
-                      icon: const Padding(
-                        padding: EdgeInsets.only(right: 14),
-                        child: Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFF64748B)),
+                      icon: Padding(
+                        padding: const EdgeInsets.only(right: 14),
+                        child: Icon(Icons.keyboard_arrow_down_rounded, color: subColor),
                       ),
                       isExpanded: true,
                       items: _serviceTypes.map((service) {
@@ -711,7 +710,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           value: service,
                           child: Text(
                             service,
-                            style: const TextStyle(fontSize: 14.5, color: Color(0xFF0F172A)),
+                            style: TextStyle(fontSize: 14.5, color: textColor),
                           ),
                         );
                       }).toList(),
@@ -725,20 +724,20 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   ),
 
                   const SizedBox(height: 18),
-                  _buildFieldLabel('Numéro de téléphone'),
+                  _buildFieldLabel('phone_label'.tr()),
                   _buildCustomTextField(
                     controller: _phoneController,
-                    hintText: '+216',
+                    hintText: '+216 52 123 456',
                     keyboardType: TextInputType.phone,
                     validator: (v) =>
                         v == null || v.trim().isEmpty ? 'Numéro de téléphone requis' : null,
                   ),
 
                   const SizedBox(height: 18),
-                  _buildFieldLabel('Numéro CIN (Carte d\'Identité Nationale)'),
+                  _buildFieldLabel('cin_label'.tr()),
                   _buildCustomTextField(
                     controller: _cinController,
-                    hintText: '(8 chiffres)',
+                    hintText: 'Ex: 08123456 (8 chiffres)',
                     keyboardType: TextInputType.number,
                     validator: (v) {
                       if (_accountType == AccountType.professionnel) {
@@ -758,7 +757,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 const SizedBox(height: 18),
 
                 // 6. Champ : Mot de passe
-                _buildFieldLabel('Mot de passe'),
+                _buildFieldLabel('password_label'.tr()),
                 _buildCustomTextField(
                   controller: _passwordController,
                   hintText: '••••••••••',
@@ -780,18 +779,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       v == null || v.length < 6 ? 'Le mot de passe doit comporter au moins 6 caractères' : null,
                 ),
                 const SizedBox(height: 6),
-                const Text(
-                  '8 caractères minimum, avec un chiffre.',
+                Text(
+                  'password_requirements'.tr(),
                   style: TextStyle(
                     fontSize: 12,
-                    color: Color(0xFF64748B),
+                    color: subColor,
                   ),
                 ),
 
                 const SizedBox(height: 18),
 
                 // 7. Champ : Confirmer le mot de passe (avec gestion visuelle de l'erreur comme le screenshot)
-                _buildFieldLabel('Confirmer le mot de passe'),
+                _buildFieldLabel('confirm_password_label'.tr()),
                 _buildCustomTextField(
                   controller: _confirmPasswordController,
                   hintText: '••••••••••',
@@ -820,17 +819,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 ),
                 if (_passwordMismatch) ...[
                   const SizedBox(height: 6),
-                  const Row(
+                  Row(
                     children: [
-                      Icon(
+                      const Icon(
                         Icons.error_outline_rounded,
                         color: Color(0xFFDC2626),
                         size: 16,
                       ),
-                      SizedBox(width: 6),
+                      const SizedBox(width: 6),
                       Text(
-                        'Les mots de passe ne correspondent pas.',
-                        style: TextStyle(
+                        'password_mismatch'.tr(),
+                        style: const TextStyle(
                           color: Color(0xFFDC2626),
                           fontSize: 12.5,
                           fontWeight: FontWeight.w500,
@@ -856,10 +855,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         width: 22,
                         height: 22,
                         decoration: BoxDecoration(
-                          color: _acceptTerms ? const Color(0xFF0D544E) : Colors.white,
+                          color: _acceptTerms ? const Color(0xFF0D544E) : cardBg,
                           borderRadius: BorderRadius.circular(6),
                           border: Border.all(
-                            color: _acceptTerms ? const Color(0xFF0D544E) : const Color(0xFFCBD5E1),
+                            color: _acceptTerms ? const Color(0xFF0D544E) : inputBorderColor,
                             width: 1.5,
                           ),
                         ),
@@ -869,12 +868,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             : null,
                       ),
                       const SizedBox(width: 10),
-                      const Expanded(
+                      Expanded(
                         child: Text(
-                          'J\'accepte les conditions d\'utilisation et la politique de confidentialité.',
+                          'accept_terms'.tr(),
                           style: TextStyle(
                             fontSize: 13,
-                            color: Color(0xFF334155),
+                            color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF334155),
                             height: 1.35,
                           ),
                         ),
@@ -894,19 +893,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(color: const Color(0xFFFDE68A)),
                   ),
-                  child: const Row(
+                  child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(
+                      const Icon(
                         Icons.info_outline_rounded,
                         color: Color(0xFFB45309),
                         size: 20,
                       ),
-                      SizedBox(width: 10),
+                      const SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          'Les profils professionnels sont validés par un administrateur avant d\'être visibles.',
-                          style: TextStyle(
+                          'pro_validation_banner'.tr(),
+                          style: const TextStyle(
                             fontSize: 12.5,
                             color: Color(0xFF92400E),
                             height: 1.4,
@@ -943,9 +942,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               color: Colors.white,
                             ),
                           )
-                        : const Text(
-                            'Créer mon compte',
-                            style: TextStyle(
+                        : Text(
+                            'create_account'.tr(),
+                            style: const TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
                               letterSpacing: 0.2,
@@ -960,11 +959,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Text(
-                      'Déjà inscrit ? ',
+                    Text(
+                      '${'already_registered'.tr()} ',
                       style: TextStyle(
                         fontSize: 14,
-                        color: Color(0xFF64748B),
+                        color: subColor,
                       ),
                     ),
                     GestureDetector(
@@ -975,9 +974,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           ),
                         );
                       },
-                      child: const Text(
-                        'Se connecter',
-                        style: TextStyle(
+                      child: Text(
+                        'login_button'.tr(),
+                        style: const TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.bold,
                           color: Color(0xFF0D544E),
@@ -997,14 +996,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   Widget _buildFieldLabel(String label) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDark ? Colors.white : const Color(0xFF0F172A);
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Text(
         label,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 13.5,
           fontWeight: FontWeight.w600,
-          color: Color(0xFF0F172A),
+          color: textColor,
         ),
       ),
     );
@@ -1021,25 +1022,31 @@ class _RegisterScreenState extends State<RegisterScreen> {
     void Function(String)? onChanged,
     bool hasError = false,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardBg = isDark ? const Color(0xFF1E293B) : Colors.white;
+    final inputBorderColor = isDark ? const Color(0xFF334155) : const Color(0xFFDDE3EA);
+    final textColor = isDark ? Colors.white : const Color(0xFF0F172A);
+    final subColor = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+
     return TextFormField(
       controller: controller,
       obscureText: isPassword ? (obscureText ?? true) : false,
       keyboardType: keyboardType,
       onChanged: onChanged,
       validator: validator,
-      style: const TextStyle(
+      style: TextStyle(
         fontSize: 15,
-        color: Color(0xFF0F172A),
+        color: textColor,
         fontWeight: FontWeight.w500,
       ),
       decoration: InputDecoration(
         hintText: hintText,
-        hintStyle: const TextStyle(
-          color: Color(0xFF94A3B8),
+        hintStyle: TextStyle(
+          color: isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8),
           fontSize: 14.5,
         ),
         filled: true,
-        fillColor: hasError ? const Color(0xFFFEF2F2) : Colors.white,
+        fillColor: hasError ? const Color(0xFFFEF2F2) : cardBg,
         contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
         suffixIcon: isPassword
             ? IconButton(
@@ -1047,7 +1054,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   (obscureText ?? true)
                       ? Icons.visibility_off_outlined
                       : Icons.visibility_outlined,
-                  color: const Color(0xFF64748B),
+                  color: subColor,
                   size: 20,
                 ),
                 onPressed: onToggleObscure,
@@ -1056,14 +1063,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
           borderSide: BorderSide(
-            color: hasError ? const Color(0xFFE53935) : const Color(0xFFDDE3EA),
+            color: hasError ? const Color(0xFFE53935) : inputBorderColor,
             width: 1.2,
           ),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
           borderSide: BorderSide(
-            color: hasError ? const Color(0xFFE53935) : const Color(0xFFDDE3EA),
+            color: hasError ? const Color(0xFFE53935) : inputBorderColor,
             width: 1.2,
           ),
         ),
@@ -1098,13 +1105,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
     required bool isSelected,
     required VoidCallback onTap,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardBg = isDark ? const Color(0xFF1E293B) : Colors.white;
+    final unselectedColor = isDark ? const Color(0xFF94A3B8) : const Color(0xFF475569);
+
     return Expanded(
       child: GestureDetector(
         onTap: onTap,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
           decoration: BoxDecoration(
-            color: isSelected ? Colors.white : Colors.transparent,
+            color: isSelected ? cardBg : Colors.transparent,
             borderRadius: BorderRadius.circular(12),
             boxShadow: isSelected
                 ? [
@@ -1123,7 +1134,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               Icon(
                 icon,
                 size: 18,
-                color: isSelected ? const Color(0xFF0D544E) : const Color(0xFF475569),
+                color: isSelected ? const Color(0xFF0D544E) : unselectedColor,
               ),
               const SizedBox(width: 8),
               Text(
@@ -1131,7 +1142,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 style: TextStyle(
                   fontSize: 14.5,
                   fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                  color: isSelected ? const Color(0xFF0D544E) : const Color(0xFF475569),
+                  color: isSelected ? const Color(0xFF0D544E) : unselectedColor,
                 ),
               ),
             ],

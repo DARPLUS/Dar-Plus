@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:math';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -870,8 +871,21 @@ class FirebaseService {
         googleProvider.addScope('email');
         googleProvider.addScope('profile');
 
-        final UserCredential cred =
-            await FirebaseAuth.instance.signInWithPopup(googleProvider);
+        // Essayer d'abord de récupérer un résultat de redirect en attente
+        // (cas où l'utilisateur revenait d'un redirect précédent)
+        UserCredential? cred;
+        if (kIsWeb) {
+          try {
+            final redirectResult = await FirebaseAuth.instance.getRedirectResult();
+            if (redirectResult.user != null) {
+              cred = redirectResult;
+            }
+          } catch (_) {}
+        }
+
+        // Si pas de résultat de redirect, utiliser signInWithPopup
+        cred ??= await FirebaseAuth.instance.signInWithPopup(googleProvider);
+
         final user = cred.user;
 
         if (user == null) {

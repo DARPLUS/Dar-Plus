@@ -1286,10 +1286,10 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                           setDialogState(() {
                             isSubmitting = true;
                           });
-                          final autoPassword = _generateSecurePassword();
                           final newAdminName = nameController.text.trim();
                           final newAdminEmail = emailController.text.trim();
                           final newAdminPhone = phoneController.text.trim();
+                          final autoPassword = _generateSecurePassword();
                           final messenger = ScaffoldMessenger.of(context);
                           final res = await FirebaseService().registerAdmin(
                             fullName: newAdminName,

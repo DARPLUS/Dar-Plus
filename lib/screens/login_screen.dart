@@ -409,7 +409,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               children: [
                                 const TextSpan(
                                   text:
-                                      'Un e-mail contenant votre mot de passe temporaire a été envoyé à :\n',
+                                      'Un lien de réinitialisation a été envoyé à :\n',
                                 ),
                                 TextSpan(
                                   text: '$sentEmail\n\n',
@@ -420,7 +420,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 ),
                                 const TextSpan(
                                   text:
-                                      'Veuillez ouvrir votre boîte de réception pour récupérer votre mot de passe temporaire et vous reconnecter.',
+                                      'Ouvrez votre boîte mail, cliquez sur le lien et définissez votre nouveau mot de passe. Vérifiez aussi vos spams.',
                                 ),
                               ],
                             ),

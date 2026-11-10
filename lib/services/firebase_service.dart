@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:math';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -549,6 +548,23 @@ class FirebaseService {
             serviceType: target.serviceType,
           );
 
+          // 4. Notification in-app pour le pro (visible dans son écran Demandes)
+          try {
+            final proUid = q.docs.isNotEmpty ? q.docs.first.id : null;
+            if (proUid != null) {
+              await FirebaseFirestore.instance.collection('notifications').add({
+                'recipientId': proUid,
+                'type': 'pro_application_approved',
+                'title': '🎉 Candidature acceptée !',
+                'body': 'Félicitations ${target.fullName} ! Votre compte professionnel DAR PLUS a été validé. Vous pouvez maintenant vous connecter.',
+                'isRead': false,
+                'createdAt': FieldValue.serverTimestamp(),
+              });
+            }
+          } catch (e) {
+            debugPrint('Notif pro approbation non envoyée: $e');
+          }
+
           await logSecurityEvent(
             action: 'Validation Professionnel',
             actorEmail: 'Administrateur',
@@ -647,6 +663,23 @@ class FirebaseService {
             proName: target.fullName,
             reason: reason.trim(),
           );
+
+          // 4. Notification in-app pour le pro
+          try {
+            final proUid = q.docs.isNotEmpty ? q.docs.first.id : null;
+            if (proUid != null) {
+              await FirebaseFirestore.instance.collection('notifications').add({
+                'recipientId': proUid,
+                'type': 'pro_application_rejected',
+                'title': '❌ Candidature non retenue',
+                'body': 'Votre candidature DAR PLUS n\'a pas été retenue. Motif : ${reason.trim()}',
+                'isRead': false,
+                'createdAt': FieldValue.serverTimestamp(),
+              });
+            }
+          } catch (e) {
+            debugPrint('Notif pro rejet non envoyée: $e');
+          }
 
           await logSecurityEvent(
             action: 'Refus Professionnel',
@@ -1523,72 +1556,63 @@ class FirebaseService {
     } catch (_) {}
   }
 
-  /// 11. Réinitialisation mot de passe (EmailJS + Firebase)
+  /// 11. Réinitialisation mot de passe — lien Firebase + notification EmailJS stylisée
   Future<Map<String, dynamic>> resetPassword(String email) async {
     final cleanEmail = email.trim().toLowerCase();
     try {
+      // Récupérer le nom de l'utilisateur depuis Firestore pour personnaliser l'email
       String userName = cleanEmail.split('@').first;
-      String? userDocId;
+      if (_isFirebaseInitialized) {
+        try {
+          final q = await FirebaseFirestore.instance
+              .collection('users')
+              .where('email', isEqualTo: cleanEmail)
+              .limit(1)
+              .get();
+          if (q.docs.isNotEmpty) {
+            final data = q.docs.first.data();
+            userName = (data['fullName'] as String?) ?? userName;
+          }
+        } catch (_) {}
+      }
 
       if (_isFirebaseInitialized) {
-        final q = await FirebaseFirestore.instance
-            .collection('users')
-            .where('email', isEqualTo: cleanEmail)
-            .limit(1)
-            .get();
+        // 1. Firebase envoie le vrai lien de réinitialisation sécurisé
+        await FirebaseAuth.instance.sendPasswordResetEmail(email: cleanEmail);
 
-        if (q.docs.isNotEmpty) {
-          final data = q.docs.first.data();
-          userName = (data['fullName'] as String?) ?? userName;
-          userDocId = q.docs.first.id;
-        }
-      }
+        // 2. EmailJS envoie l'email stylisé DAR PLUS de notification
+        try {
+          await EmailService.sendPasswordResetLinkNotification(
+            toEmail: cleanEmail,
+            userName: userName,
+          );
+        } catch (_) {}
 
-      // Génération d'un mot de passe temporaire lisible et sécurisé (ex: DP-849201)
-      final tempPassword = 'DP-${100000 + Random().nextInt(900000)}';
-
-      if (_isFirebaseInitialized && userDocId != null) {
-        await FirebaseFirestore.instance.collection('users').doc(userDocId).set({
-          'tempPassword': tempPassword,
-          'mustChangePassword': true,
-          'updatedAt': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
-      }
-
-      if (_localUsers.containsKey(cleanEmail)) {
-        _localUsers[cleanEmail]!['tempPassword'] = tempPassword;
-        _localUsers[cleanEmail]!['mustChangePassword'] = true;
-      }
-
-      // Envoi du bel email stylisé DAR PLUS avec le mot de passe temporaire via EmailJS
-      final bool emailSent = await EmailService.sendPasswordResetEmail(
-        toEmail: cleanEmail,
-        userName: userName,
-        temporaryPassword: tempPassword,
-      );
-
-      // Envoi en parallèle via Firebase Auth si supporté
-      try {
-        if (_isFirebaseInitialized) {
-          await FirebaseAuth.instance.sendPasswordResetEmail(email: cleanEmail);
-        }
-      } catch (_) {}
-
-      if (emailSent) {
         return {
           'success': true,
-          'message': 'Un mot de passe temporaire a été envoyé à $cleanEmail.',
+          'message': 'Un lien de réinitialisation a été envoyé à $cleanEmail. Vérifiez votre boîte mail (et vos spams).',
         };
       } else {
         return {
           'success': true,
-          'message': 'Lien de réinitialisation envoyé à $cleanEmail.',
+          'message': 'Lien de réinitialisation envoyé à $cleanEmail (mode demo).',
         };
       }
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'user-not-found') {
+        return {
+          'success': false,
+          'message': 'Aucun compte trouvé avec cette adresse e-mail.',
+        };
+      }
+      return {
+        'success': false,
+        'message': 'Erreur : ${e.message ?? e.code}',
+      };
     } catch (e) {
       return {
         'success': false,
-        'message': 'Erreur lors de la réinitialisation : $e',
+        'message': 'Erreur lors de l\'envoi : $e',
       };
     }
   }
@@ -2328,28 +2352,39 @@ class FirebaseService {
     final user = FirebaseAuth.instance.currentUser;
     final uid = user?.uid;
     if (_isFirebaseInitialized && uid != null) {
+      // Essayer avec orderBy (nécessite un index Firestore composite)
+      // Si l'index n'existe pas, Firestore lance une erreur → on trie côté client
       return FirebaseFirestore.instance
           .collection('notifications')
           .where('recipientId', isEqualTo: uid)
-          .orderBy('createdAt', descending: true)
           .limit(30)
           .snapshots()
-          .map((snap) => snap.docs.map((d) {
-                final data = d.data();
-                data['id'] = d.id;
-                final ts = data['createdAt'];
-                if (ts is Timestamp) {
-                  final dt = ts.toDate();
-                  final diff = DateTime.now().difference(dt);
-                  if (diff.inMinutes < 1) data['timeLabel'] = 'À l\'instant';
-                  else if (diff.inMinutes < 60) data['timeLabel'] = 'Il y a ${diff.inMinutes} min';
-                  else if (diff.inHours < 24) data['timeLabel'] = 'Il y a ${diff.inHours}h';
-                  else data['timeLabel'] = 'Il y a ${diff.inDays}j';
-                } else {
-                  data['timeLabel'] = '';
-                }
-                return data;
-              }).toList());
+          .map((snap) {
+            final list = snap.docs.map((d) {
+              final data = d.data();
+              data['id'] = d.id;
+              final ts = data['createdAt'];
+              if (ts is Timestamp) {
+                final dt = ts.toDate();
+                final diff = DateTime.now().difference(dt);
+                if (diff.inMinutes < 1) data['timeLabel'] = 'À l\'instant';
+                else if (diff.inMinutes < 60) data['timeLabel'] = 'Il y a ${diff.inMinutes} min';
+                else if (diff.inHours < 24) data['timeLabel'] = 'Il y a ${diff.inHours}h';
+                else data['timeLabel'] = 'Il y a ${diff.inDays}j';
+              } else {
+                data['timeLabel'] = '';
+              }
+              return data;
+            }).toList();
+            // Tri côté client par createdAt décroissant
+            list.sort((a, b) {
+              final aTs = a['createdAt'];
+              final bTs = b['createdAt'];
+              if (aTs is Timestamp && bTs is Timestamp) return bTs.compareTo(aTs);
+              return 0;
+            });
+            return list;
+          });
     }
     return Stream.value([]);
   }

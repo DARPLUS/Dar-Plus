@@ -411,5 +411,8 @@
   "pro_req_accepted_snack": "تم قبول الطلب!",
   "pro_req_refused_snack": "تم رفض الطلب.",
   "pro_req_done_snack": "تم تحديد الخدمة كمكتملة.",
-  "pro_req_empty": "لا توجد طلبات حالياً."
+  "pro_req_empty": "لا توجد طلبات حالياً.",
+  "notifications": "الإشعارات",
+  "no_notifications": "لا توجد إشعارات جديدة",
+  "mark_all_read": "تحديد الكل كمقروء"
 }

@@ -2231,10 +2231,11 @@ class FirebaseService {
     return Stream.value(list);
   }
 
-  /// Met à jour le statut d'une réservation (pro accepte / refuse)
+  /// Met à jour le statut d'une réservation (pro accepte / refuse) + notif client
   Future<bool> updateBookingStatus(String bookingId, String newStatus) async {
     try {
       if (_isFirebaseInitialized) {
+        // 1. Mettre à jour le statut
         await FirebaseFirestore.instance
             .collection('bookings')
             .doc(bookingId)
@@ -2242,7 +2243,57 @@ class FirebaseService {
           'status': newStatus,
           'updatedAt': FieldValue.serverTimestamp(),
         });
+
+        // 2. Récupérer le booking pour obtenir clientId et détails
+        try {
+          final bookingDoc = await FirebaseFirestore.instance
+              .collection('bookings')
+              .doc(bookingId)
+              .get();
+          if (bookingDoc.exists) {
+            final data = bookingDoc.data()!;
+            final clientId = data['clientId'] as String?;
+            final proName = data['proName'] as String? ?? 'Le professionnel';
+            final serviceType = data['serviceType'] as String? ?? 'le service';
+
+            if (clientId != null && clientId.isNotEmpty && clientId != 'client_anon') {
+              String title = '';
+              String body = '';
+
+              if (newStatus == 'confirmee') {
+                title = '✅ Demande acceptée';
+                body = '$proName a accepté votre demande de $serviceType.';
+              } else if (newStatus == 'annulee') {
+                title = '❌ Demande refusée';
+                body = '$proName ne peut pas prendre en charge votre demande de $serviceType.';
+              } else if (newStatus == 'terminee') {
+                title = '🏁 Intervention terminée';
+                body = '$proName a marqué l\'intervention "$serviceType" comme terminée.';
+              }
+
+              if (title.isNotEmpty) {
+                await FirebaseFirestore.instance
+                    .collection('notifications')
+                    .add({
+                  'recipientId': clientId,
+                  'type': 'booking_status_update',
+                  'title': title,
+                  'body': body,
+                  'bookingId': bookingId,
+                  'proName': proName,
+                  'serviceType': serviceType,
+                  'newStatus': newStatus,
+                  'isRead': false,
+                  'createdAt': FieldValue.serverTimestamp(),
+                });
+              }
+            }
+          }
+        } catch (e) {
+          debugPrint('Notif client non envoyée: $e');
+        }
       }
+
       final idx = _localBookings.indexWhere((b) => b['id'] == bookingId);
       if (idx != -1) _localBookings[idx]['status'] = newStatus;
       return true;
@@ -2250,6 +2301,67 @@ class FirebaseService {
       debugPrint('Erreur updateBookingStatus: $e');
       return false;
     }
+  }
+
+  /// Stream des notifications du client connecté
+  Stream<List<Map<String, dynamic>>> streamClientNotifications() {
+    final user = FirebaseAuth.instance.currentUser;
+    final uid = user?.uid;
+    if (_isFirebaseInitialized && uid != null) {
+      return FirebaseFirestore.instance
+          .collection('notifications')
+          .where('recipientId', isEqualTo: uid)
+          .orderBy('createdAt', descending: true)
+          .limit(30)
+          .snapshots()
+          .map((snap) => snap.docs.map((d) {
+                final data = d.data();
+                data['id'] = d.id;
+                final ts = data['createdAt'];
+                if (ts is Timestamp) {
+                  final dt = ts.toDate();
+                  final diff = DateTime.now().difference(dt);
+                  if (diff.inMinutes < 1) data['timeLabel'] = 'À l\'instant';
+                  else if (diff.inMinutes < 60) data['timeLabel'] = 'Il y a ${diff.inMinutes} min';
+                  else if (diff.inHours < 24) data['timeLabel'] = 'Il y a ${diff.inHours}h';
+                  else data['timeLabel'] = 'Il y a ${diff.inDays}j';
+                } else {
+                  data['timeLabel'] = '';
+                }
+                return data;
+              }).toList());
+    }
+    return Stream.value([]);
+  }
+
+  /// Marquer une notification comme lue
+  Future<void> markNotificationRead(String notifId) async {
+    try {
+      if (_isFirebaseInitialized) {
+        await FirebaseFirestore.instance
+            .collection('notifications')
+            .doc(notifId)
+            .update({'isRead': true});
+      }
+    } catch (_) {}
+  }
+
+  /// Marquer toutes les notifications comme lues
+  Future<void> markAllNotificationsRead(String userId) async {
+    try {
+      if (_isFirebaseInitialized) {
+        final snap = await FirebaseFirestore.instance
+            .collection('notifications')
+            .where('recipientId', isEqualTo: userId)
+            .where('isRead', isEqualTo: false)
+            .get();
+        final batch = FirebaseFirestore.instance.batch();
+        for (final doc in snap.docs) {
+          batch.update(doc.reference, {'isRead': true});
+        }
+        await batch.commit();
+      }
+    } catch (_) {}
   }
 
   /// Écoute en temps réel des avis d'un professionnel

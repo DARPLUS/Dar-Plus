@@ -411,5 +411,8 @@
   "pro_req_accepted_snack": "Request accepted!",
   "pro_req_refused_snack": "Request declined.",
   "pro_req_done_snack": "Service marked as completed.",
-  "pro_req_empty": "No requests at the moment."
+  "pro_req_empty": "No requests at the moment.",
+  "notifications": "Notifications",
+  "no_notifications": "No new notifications",
+  "mark_all_read": "Mark all as read"
 }

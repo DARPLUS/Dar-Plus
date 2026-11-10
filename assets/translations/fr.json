@@ -411,5 +411,8 @@
   "pro_req_accepted_snack": "Demande acceptée !",
   "pro_req_refused_snack": "Demande refusée.",
   "pro_req_done_snack": "Intervention marquée comme terminée.",
-  "pro_req_empty": "Aucune demande pour le moment."
+  "pro_req_empty": "Aucune demande pour le moment.",
+  "notifications": "Notifications",
+  "no_notifications": "Aucune nouvelle notification",
+  "mark_all_read": "Tout marquer comme lu"
 }

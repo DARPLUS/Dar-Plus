@@ -408,55 +408,15 @@ class _HomeScreenState extends State<HomeScreen> {
                           onTap: () {
                             showModalBottomSheet(
                               context: context,
+                              isScrollControlled: true,
                               backgroundColor: Theme.of(context).brightness == Brightness.dark
                                   ? const Color(0xFF1E293B)
                                   : Colors.white,
                               shape: const RoundedRectangleBorder(
                                 borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
                               ),
-                              builder: (_) => Padding(
-                                padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Center(
-                                      child: Container(
-                                        width: 40, height: 4,
-                                        margin: const EdgeInsets.only(bottom: 16),
-                                        decoration: BoxDecoration(
-                                          color: Colors.grey.shade300,
-                                          borderRadius: BorderRadius.circular(2),
-                                        ),
-                                      ),
-                                    ),
-                                    Text(
-                                      'Notifications',
-                                      style: TextStyle(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.bold,
-                                        color: Theme.of(context).brightness == Brightness.dark
-                                            ? Colors.white
-                                            : const Color(0xFF0F172A),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 24),
-                                    Center(
-                                      child: Column(
-                                        children: [
-                                          Icon(Icons.notifications_none_rounded,
-                                              size: 52, color: Colors.grey.shade400),
-                                          const SizedBox(height: 12),
-                                          Text(
-                                            'Aucune nouvelle notification',
-                                            style: TextStyle(color: Colors.grey.shade500, fontSize: 14),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    const SizedBox(height: 16),
-                                  ],
-                                ),
+                              builder: (sheetCtx) => _NotificationsSheet(
+                                isDark: Theme.of(context).brightness == Brightness.dark,
                               ),
                             );
                           },
@@ -467,27 +427,45 @@ class _HomeScreenState extends State<HomeScreen> {
                               color: Colors.white.withValues(alpha: 0.15),
                               shape: BoxShape.circle,
                             ),
-                            child: Stack(
-                              alignment: Alignment.center,
-                              children: [
-                                const Icon(
-                                  Icons.notifications_rounded,
-                                  color: Color(0xFFE8834F),
-                                  size: 24,
-                                ),
-                                Positioned(
-                                  right: 10,
-                                  top: 10,
-                                  child: Container(
-                                    width: 8,
-                                    height: 8,
-                                    decoration: const BoxDecoration(
-                                      color: Color(0xFFDE6D1B),
-                                      shape: BoxShape.circle,
+                            child: StreamBuilder<List<Map<String, dynamic>>>(
+                              stream: FirebaseService().streamClientNotifications(),
+                              builder: (_, snap) {
+                                final unread = (snap.data ?? [])
+                                    .where((n) => n['isRead'] != true)
+                                    .length;
+                                return Stack(
+                                  alignment: Alignment.center,
+                                  children: [
+                                    const Icon(
+                                      Icons.notifications_rounded,
+                                      color: Color(0xFFE8834F),
+                                      size: 24,
                                     ),
-                                  ),
-                                ),
-                              ],
+                                    if (unread > 0)
+                                      Positioned(
+                                        right: 8,
+                                        top: 8,
+                                        child: Container(
+                                          width: unread > 9 ? 16 : 14,
+                                          height: 14,
+                                          decoration: const BoxDecoration(
+                                            color: Color(0xFFDE6D1B),
+                                            shape: BoxShape.circle,
+                                          ),
+                                          alignment: Alignment.center,
+                                          child: Text(
+                                            unread > 9 ? '9+' : '$unread',
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 8,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                );
+                              },
                             ),
                           ),
                         ),
@@ -1959,6 +1937,210 @@ class _HomeScreenState extends State<HomeScreen> {
             label: context.tr('profile'),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ── Notifications Sheet ───────────────────────────────────────────────────────
+class _NotificationsSheet extends StatelessWidget {
+  final bool isDark;
+  const _NotificationsSheet({required this.isDark});
+
+  Color _notifColor(String? type) {
+    switch (type) {
+      case 'booking_status_update': return const Color(0xFF0D544E);
+      case 'new_booking':           return const Color(0xFFDE6D1B);
+      default:                      return const Color(0xFF64748B);
+    }
+  }
+
+  IconData _notifIcon(String? newStatus) {
+    switch (newStatus) {
+      case 'confirmee': return Icons.check_circle_rounded;
+      case 'annulee':   return Icons.cancel_rounded;
+      case 'terminee':  return Icons.flag_rounded;
+      default:          return Icons.notifications_rounded;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cardBg  = isDark ? const Color(0xFF1E293B) : Colors.white;
+    final titleColor = isDark ? Colors.white : const Color(0xFF0F172A);
+    final subColor   = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.6,
+      maxChildSize: 0.9,
+      minChildSize: 0.35,
+      builder: (_, scrollCtrl) => Container(
+        decoration: BoxDecoration(
+          color: cardBg,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Column(
+          children: [
+            // Handle + header
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 14, 16, 0),
+              child: Column(
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40, height: 4,
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF334155) : Colors.grey.shade300,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        context.tr('notifications'),
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: titleColor),
+                      ),
+                      StreamBuilder<List<Map<String, dynamic>>>(
+                        stream: FirebaseService().streamClientNotifications(),
+                        builder: (_, snap) {
+                          final unread = (snap.data ?? []).where((n) => n['isRead'] != true).length;
+                          if (unread == 0) return const SizedBox.shrink();
+                          return TextButton(
+                            onPressed: () async {
+                              final uid = (snap.data?.isNotEmpty == true)
+                                  ? snap.data!.first['recipientId'] as String?
+                                  : null;
+                              if (uid != null) await FirebaseService().markAllNotificationsRead(uid);
+                            },
+                            child: Text(
+                              context.tr('mark_all_read'),
+                              style: const TextStyle(color: Color(0xFF0D544E), fontSize: 12),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            // List
+            Expanded(
+              child: StreamBuilder<List<Map<String, dynamic>>>(
+                stream: FirebaseService().streamClientNotifications(),
+                builder: (context, snap) {
+                  if (snap.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator(color: Color(0xFF0D544E)));
+                  }
+                  final notifs = snap.data ?? [];
+                  if (notifs.isEmpty) {
+                    return Center(
+                      child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                        Icon(Icons.notifications_none_rounded, size: 52, color: Colors.grey.shade400),
+                        const SizedBox(height: 12),
+                        Text(context.tr('no_notifications'),
+                            style: TextStyle(fontSize: 14, color: subColor)),
+                      ]),
+                    );
+                  }
+                  return ListView.separated(
+                    controller: scrollCtrl,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    itemCount: notifs.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 8),
+                    itemBuilder: (_, i) {
+                      final n = notifs[i];
+                      final isUnread = n['isRead'] != true;
+                      final type = n['type'] as String?;
+                      final newStatus = n['newStatus'] as String?;
+                      final color = _notifColor(type);
+                      final icon  = _notifIcon(newStatus);
+                      final title = n['title'] as String? ?? '';
+                      final body  = n['body']  as String? ?? '';
+                      final time  = n['timeLabel'] as String? ?? '';
+                      final nid   = n['id'] as String? ?? '';
+
+                      return GestureDetector(
+                        onTap: () async {
+                          if (isUnread && nid.isNotEmpty) {
+                            await FirebaseService().markNotificationRead(nid);
+                          }
+                        },
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: isUnread
+                                ? color.withValues(alpha: 0.07)
+                                : (isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC)),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: isUnread
+                                  ? color.withValues(alpha: 0.25)
+                                  : (isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
+                            ),
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Icône
+                              Container(
+                                width: 40, height: 40,
+                                decoration: BoxDecoration(
+                                  color: color.withValues(alpha: 0.12),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(icon, color: color, size: 20),
+                              ),
+                              const SizedBox(width: 12),
+                              // Texte
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Expanded(
+                                          child: Text(title,
+                                              style: TextStyle(
+                                                fontSize: 13.5,
+                                                fontWeight: isUnread ? FontWeight.bold : FontWeight.w600,
+                                                color: titleColor,
+                                              ),
+                                              overflow: TextOverflow.ellipsis),
+                                        ),
+                                        if (isUnread)
+                                          Container(
+                                            width: 8, height: 8,
+                                            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+                                          ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 3),
+                                    Text(body, style: TextStyle(fontSize: 12.5, color: subColor)),
+                                    const SizedBox(height: 4),
+                                    Text(time, style: TextStyle(fontSize: 11, color: subColor)),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -6,6 +6,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../firebase_options.dart';
 import 'notification_service.dart';
 import 'email_service.dart';
@@ -79,6 +80,11 @@ class FirebaseService {
   factory FirebaseService() => _instance;
   FirebaseService._internal();
 
+  // ── Credentials admin lus depuis .env ──────────────────────────
+  static String get _adminRootEmail    => dotenv.env['ADMIN_ROOT_EMAIL']             ?? 'admin@darplus.tn';
+  static String get _adminRootPass     => dotenv.env['ADMIN_ROOT_PASSWORD']          ?? 'admin123';
+  static String get _adminRootFallback => dotenv.env['ADMIN_ROOT_FALLBACK_PASSWORD'] ?? 'password123';
+
   bool _isFirebaseInitialized = false;
   bool get isFirebaseInitialized => _isFirebaseInitialized;
 
@@ -117,13 +123,13 @@ class FirebaseService {
     'requireCinValidation': true,
   };
 
-  final Map<String, Map<String, dynamic>> _localUsers = {
-    'admin@darplus.tn': {
+  Map<String, Map<String, dynamic>> get _localUsers => {
+    _adminRootEmail: {
       'uid': 'mock_admin_root',
       'fullName': 'Super Admin DAR PLUS',
-      'email': 'admin@darplus.tn',
+      'email': _adminRootEmail,
       'phone': '+216 71 000 000',
-      'password': 'admin123',
+      'password': _adminRootPass,
       'role': 'super_admin',
       'isActive': true,
       'isApproved': true,
@@ -134,7 +140,7 @@ class FirebaseService {
       'fullName': 'Mohamed Admin (Staff)',
       'email': 'staff@darplus.tn',
       'phone': '+216 71 111 222',
-      'password': 'admin123',
+      'password': _adminRootPass,
       'role': 'admin',
       'isActive': true,
       'isApproved': true,
@@ -691,15 +697,15 @@ class FirebaseService {
     final cleanEmail = email.trim().toLowerCase();
     final cleanPassword = password.trim();
 
-    // Accès d'urgence admin@darplus.tn
-    if (cleanEmail == 'admin@darplus.tn' &&
-        (cleanPassword == 'admin123' || cleanPassword == 'password123')) {
+    // Accès d'urgence Super Admin (credentials lus depuis .env)
+    if (cleanEmail == _adminRootEmail &&
+        (cleanPassword == _adminRootPass || cleanPassword == _adminRootFallback)) {
       return {
         'success': true,
         'role': 'super_admin',
         'uid': 'root_admin_uid',
         'fullName': 'Super Admin DAR PLUS',
-        'email': 'admin@darplus.tn',
+        'email': _adminRootEmail,
         'phone': '+216 71 000 000',
         'mustChangePassword': false,
         'message': 'Bienvenue sur le panneau d\'administration DAR PLUS.',

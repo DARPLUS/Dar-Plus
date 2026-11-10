@@ -2679,4 +2679,88 @@ class FirebaseService {
 
     return Stream.value(List<Map<String, dynamic>>.from(_localFavoritesList));
   }
+
+  // ── Disponibilité du Pro ──────────────────────────────────────────────────
+
+  /// Met à jour le champ `available` du pro connecté dans Firestore
+  Future<void> updateProAvailability(bool available) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    try {
+      if (_isFirebaseInitialized) {
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .update({
+          'available': available,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      }
+    } catch (e) {
+      debugPrint('Erreur updateProAvailability: $e');
+      rethrow;
+    }
+  }
+
+  // ── Services du Pro ───────────────────────────────────────────────────────
+
+  /// Stream des services créés par le pro connecté
+  Stream<List<Map<String, dynamic>>> streamMyServices() {
+    final user = FirebaseAuth.instance.currentUser;
+    if (_isFirebaseInitialized && user != null) {
+      return FirebaseFirestore.instance
+          .collection('pro_services')
+          .where('proId', isEqualTo: user.uid)
+          .snapshots()
+          .map((snap) => snap.docs.map((d) {
+                final data = d.data();
+                data['id'] = d.id;
+                return data;
+              }).toList());
+    }
+    return Stream.value([]);
+  }
+
+  /// Crée ou met à jour un service du pro connecté
+  Future<void> saveMyService({
+    String? id,
+    required String name,
+    required String description,
+    required double price,
+    String? photoUrl,
+  }) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) throw Exception('Non connecté');
+    final data = {
+      'proId': user.uid,
+      'name': name.trim(),
+      'description': description.trim(),
+      'price': price,
+      'photoUrl': photoUrl?.trim() ?? '',
+      'updatedAt': FieldValue.serverTimestamp(),
+    };
+    if (_isFirebaseInitialized) {
+      if (id != null && id.isNotEmpty) {
+        await FirebaseFirestore.instance
+            .collection('pro_services')
+            .doc(id)
+            .update(data);
+      } else {
+        data['createdAt'] = FieldValue.serverTimestamp();
+        await FirebaseFirestore.instance
+            .collection('pro_services')
+            .add(data);
+      }
+    }
+  }
+
+  /// Supprime un service du pro connecté
+  Future<void> deleteMyService(String serviceId) async {
+    if (_isFirebaseInitialized) {
+      await FirebaseFirestore.instance
+          .collection('pro_services')
+          .doc(serviceId)
+          .delete();
+    }
+  }
 }

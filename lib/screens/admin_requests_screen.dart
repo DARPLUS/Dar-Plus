@@ -1126,7 +1126,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                 children: [
                   const Icon(
                     Icons.admin_panel_settings_rounded,
-                    color: Color(0xFF7C3AED),
+                    color: Color(0xFF0D544E),
                     size: 26,
                   ),
                   const SizedBox(width: 10),
@@ -1159,9 +1159,17 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                         style: TextStyle(color: dlgIsDark ? Colors.white : AppTheme.titleColor),
                         decoration: InputDecoration(
                           labelText: 'admin_full_name'.tr(),
-                          prefixIcon: const Icon(Icons.person_rounded, size: 20),
+                          prefixIcon: const Icon(Icons.person_rounded, size: 20, color: Color(0xFF0D544E)),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(14),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide(color: dlgIsDark ? const Color(0xFF475569) : const Color(0xFFDDE3EA)),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: const BorderSide(color: Color(0xFF0D544E), width: 1.5),
                           ),
                           contentPadding: const EdgeInsets.symmetric(
                             horizontal: 14,
@@ -1178,9 +1186,17 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                         style: TextStyle(color: dlgIsDark ? Colors.white : AppTheme.titleColor),
                         decoration: InputDecoration(
                           labelText: 'admin_phone_number'.tr(),
-                          prefixIcon: const Icon(Icons.phone_rounded, size: 20),
+                          prefixIcon: const Icon(Icons.phone_rounded, size: 20, color: Color(0xFF0D544E)),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(14),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide(color: dlgIsDark ? const Color(0xFF475569) : const Color(0xFFDDE3EA)),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: const BorderSide(color: Color(0xFF0D544E), width: 1.5),
                           ),
                           contentPadding: const EdgeInsets.symmetric(
                             horizontal: 14,
@@ -1199,9 +1215,17 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                         decoration: InputDecoration(
                           labelText: 'admin_institutional_email'.tr(),
                           prefixIcon:
-                              const Icon(Icons.alternate_email_rounded, size: 20),
+                              const Icon(Icons.alternate_email_rounded, size: 20, color: Color(0xFF0D544E)),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(14),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide(color: dlgIsDark ? const Color(0xFF475569) : const Color(0xFFDDE3EA)),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: const BorderSide(color: Color(0xFF0D544E), width: 1.5),
                           ),
                           contentPadding: const EdgeInsets.symmetric(
                             horizontal: 14,
@@ -1216,26 +1240,26 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
                           color: dlgIsDark
-                              ? const Color(0xFF4C1D95).withValues(alpha: 0.3)
-                              : const Color(0xFFF3E8FF),
+                              ? const Color(0xFF0D544E).withValues(alpha: 0.22)
+                              : const Color(0xFFE8F3F1),
                           borderRadius: BorderRadius.circular(14),
                           border: Border.all(
                             color: dlgIsDark
-                                ? const Color(0xFF7C3AED).withValues(alpha: 0.4)
-                                : const Color(0xFFDDD6FE),
+                                ? const Color(0xFF2A746C).withValues(alpha: 0.5)
+                                : const Color(0xFFC6DFDA),
                           ),
                         ),
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Icon(Icons.mark_email_read_rounded, color: Color(0xFF7C3AED), size: 20),
+                            const Icon(Icons.mark_email_read_rounded, color: Color(0xFF0D544E), size: 20),
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
                                 'admin_password_auto_generated'.tr(),
                                 style: TextStyle(
                                   fontSize: 12,
-                                  color: dlgIsDark ? const Color(0xFFC4B5FD) : const Color(0xFF5B21B6),
+                                  color: dlgIsDark ? const Color(0xFFA7D2CA) : const Color(0xFF0D544E),
                                   height: 1.35,
                                   fontWeight: FontWeight.w500,
                                 ),
@@ -1299,7 +1323,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                           }
                         },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF7C3AED),
+                    backgroundColor: const Color(0xFF0D544E),
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),

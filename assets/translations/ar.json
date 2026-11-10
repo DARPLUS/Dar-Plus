@@ -253,7 +253,7 @@
   "admin_create_account_desc": "إضافة مشرف جديد لإدارة منصة دار بلس.",
   "admin_institutional_email": "البريد المهني الرسمي",
   "admin_password_auto_generated": "سيتم إنشاء كلمة المرور تلقائياً وإرسالها عبر البريد.",
-  "admin_create_and_send": "إنشاء وإرسال بيانات الدخول",
+  "admin_create_and_send": "إنشاء",
   "admin_created_success": "تم إنشاء المشرف بنجاح!",
   "admin_account_activated": "تم تفعيل حساب المشرف.",
   "admin_email_sent_to": "تم إرسال البريد إلى:",

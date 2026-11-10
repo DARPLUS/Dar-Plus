@@ -65,6 +65,108 @@ class EmailService {
     }
   }
 
+  /// Envoie un email de réinitialisation avec le vrai lien cliquable via EmailJS
+  static Future<bool> sendPasswordResetWithLink({
+    required String toEmail,
+    required String userName,
+    required String resetLink,
+  }) async {
+    final htmlBody = _buildPasswordResetWithLinkHtml(
+      userName: userName,
+      toEmail: toEmail,
+      resetLink: resetLink,
+    );
+    try {
+      final response = await http.post(
+        Uri.parse('https://api.emailjs.com/api/v1.0/email/send'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'service_id': _serviceId,
+          'template_id': _templateId,
+          'user_id': _publicKey,
+          'template_params': {
+            'to_email': toEmail,
+            'to_name': userName,
+            'from_name': 'DAR PLUS',
+            'name': 'DAR PLUS',
+            'subject': 'Réinitialisation de votre mot de passe DAR PLUS',
+            'html_body': htmlBody,
+          },
+        }),
+      );
+      if (response.statusCode == 200) {
+        debugPrint('✅ Email reset avec lien envoyé à $toEmail');
+        return true;
+      }
+      debugPrint('❌ EmailJS erreur ${response.statusCode}: ${response.body}');
+      return false;
+    } catch (e) {
+      debugPrint('❌ Erreur EmailJS: $e');
+      return false;
+    }
+  }
+
+  /// Template HTML avec vrai bouton lien de réinitialisation
+  static String _buildPasswordResetWithLinkHtml({
+    required String userName,
+    required String toEmail,
+    required String resetLink,
+  }) {
+    final year = DateTime.now().year;
+    return '''<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<style>
+  body{margin:0;padding:0;background:#f4f4f4;font-family:'Segoe UI',Arial,sans-serif;}
+  .wrapper{max-width:580px;margin:32px auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);}
+  .header{background:linear-gradient(135deg,#0D544E 0%,#0a3f3a 100%);padding:36px 32px 28px;text-align:center;}
+  .header h1{color:#fff;font-size:28px;margin:0;letter-spacing:3px;font-weight:900;}
+  .header p{color:rgba(255,255,255,0.75);font-size:13px;margin:6px 0 0;}
+  .body{padding:36px 32px;}
+  .greeting{font-size:17px;font-weight:700;color:#0F172A;margin-bottom:12px;}
+  .text{font-size:14.5px;color:#475569;line-height:1.6;margin-bottom:20px;}
+  .btn-wrap{text-align:center;margin:32px 0;}
+  .btn{display:inline-block;background:#0D544E;color:#fff!important;text-decoration:none;padding:16px 40px;border-radius:50px;font-size:16px;font-weight:700;letter-spacing:0.5px;}
+  .alert{background:#FEF3C7;border:1px solid #FDE68A;border-radius:10px;padding:12px 16px;font-size:12.5px;color:#92400E;margin:20px 0;}
+  .link-fallback{font-size:11.5px;color:#94A3B8;word-break:break-all;margin-top:12px;}
+  .footer{background:#F8FAFC;padding:18px 32px;text-align:center;font-size:11px;color:#94A3B8;border-top:1px solid #E2E8F0;}
+</style>
+</head>
+<body>
+<div class="wrapper">
+  <div class="header">
+    <h1>DAR PLUS</h1>
+    <p>Des professionnels à votre service</p>
+  </div>
+  <div class="body">
+    <p class="greeting">Bonjour $userName,</p>
+    <p class="text">
+      Nous avons reçu une demande de réinitialisation du mot de passe pour votre compte DAR PLUS associé à l'adresse <strong>$toEmail</strong>.
+    </p>
+    <p class="text">Cliquez sur le bouton ci-dessous pour choisir un nouveau mot de passe :</p>
+    <div class="btn-wrap">
+      <a href="$resetLink" class="btn">🔐 Réinitialiser mon mot de passe</a>
+    </div>
+    <div class="alert">
+      ⚠️ Si vous n'avez pas demandé cette réinitialisation, ignorez cet email. Votre mot de passe reste inchangé.
+    </div>
+    <p class="link-fallback">
+      Si le bouton ne fonctionne pas, copiez ce lien dans votre navigateur :<br>
+      <a href="$resetLink" style="color:#0D544E;">$resetLink</a>
+    </p>
+    <p style="font-size:12px;color:#94A3B8;margin-top:8px;">⏱ Ce lien expire dans <strong>1 heure</strong>.</p>
+  </div>
+  <div class="footer">
+    &copy; $year DAR PLUS — Tous droits réservés<br>
+    <span style="color:#CBD5E1;">Cet email est automatique, merci de ne pas y répondre.</span>
+  </div>
+</div>
+</body>
+</html>''';
+  }
+
   /// Envoie un email stylisé via EmailJS notifiant l'utilisateur
   /// qu'un lien de réinitialisation de mot de passe lui a été envoyé par Firebase.
   /// Le vrai lien cliquable est dans l'email Firebase envoyé séparément.

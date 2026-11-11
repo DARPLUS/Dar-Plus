@@ -83,6 +83,7 @@ class AppTheme {
           side: const BorderSide(color: Color(0xFFEDE8E1)),
         ),
       ),
+      listTileTheme: const ListTileThemeData(tileColor: cardLight),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: Colors.white,
@@ -150,6 +151,7 @@ class AppTheme {
           side: const BorderSide(color: darkDivider),
         ),
       ),
+      listTileTheme: const ListTileThemeData(tileColor: darkCard),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: darkCard,

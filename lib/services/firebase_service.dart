@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -6,6 +7,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:http/http.dart' as http;
 import '../firebase_options.dart';
 import 'notification_service.dart';
 import 'email_service.dart';
@@ -1556,35 +1558,85 @@ class FirebaseService {
     } catch (_) {}
   }
 
-  /// 11. Réinitialisation mot de passe — lien Firebase + notification EmailJS stylisée
+  /// 11. Réinitialisation mot de passe via EmailJS (lien Firebase Auth REST API)
   Future<Map<String, dynamic>> resetPassword(String email) async {
     final cleanEmail = email.trim().toLowerCase();
     try {
+      // ── Étape 1 : Générer le lien via Firebase Auth REST API ──────────────
+      // POST https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode
+      // Retourne un lien oobLink que l'on inclut dans l'email EmailJS
+      final apiKey = dotenv.env['FIREBASE_API_KEY'] ?? '';
+      String? resetLink;
+      String userName = cleanEmail.split('@').first;
+
+      if (_isFirebaseInitialized && apiKey.isNotEmpty) {
+        try {
+          final resp = await http.post(
+            Uri.parse(
+                'https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=$apiKey'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'requestType': 'PASSWORD_RESET',
+              'email': cleanEmail,
+            }),
+          );
+          if (resp.statusCode == 200) {
+            final data = jsonDecode(resp.body) as Map<String, dynamic>;
+            resetLink = data['oobLink'] as String?;
+          } else {
+            final err = jsonDecode(resp.body) as Map<String, dynamic>;
+            final code = (err['error'] as Map?)?['message'] ?? '';
+            if (code == 'EMAIL_NOT_FOUND') {
+              return {
+                'success': false,
+                'message': 'Aucun compte trouvé avec cette adresse e-mail.',
+              };
+            }
+          }
+        } catch (_) {}
+
+        // Récupérer le nom depuis Firestore (optionnel)
+        try {
+          final q = await FirebaseFirestore.instance
+              .collection('users')
+              .where('email', isEqualTo: cleanEmail)
+              .limit(1)
+              .get();
+          if (q.docs.isNotEmpty) {
+            userName = (q.docs.first.data()['fullName'] as String?) ?? userName;
+          }
+        } catch (_) {}
+      }
+
+      // ── Étape 2 : Envoyer l'email via EmailJS avec le lien ────────────────
+      if (resetLink != null && resetLink.isNotEmpty) {
+        final sent = await EmailService.sendPasswordResetWithLink(
+          toEmail: cleanEmail,
+          userName: userName,
+          resetLink: resetLink,
+        );
+        if (sent) {
+          return {
+            'success': true,
+            'message': 'Un email de réinitialisation a été envoyé à $cleanEmail.',
+          };
+        }
+      }
+
+      // Fallback : Firebase envoie son propre email
       if (_isFirebaseInitialized) {
-        // 1. Firebase Auth envoie l'email avec le lien sécurisé (en priorité)
         await FirebaseAuth.instance.sendPasswordResetEmail(email: cleanEmail);
-
-        // 2. Récupérer le nom (optionnel, ne bloque pas si Firestore échoue)
-        // Note: on ne requête plus Firestore avant le sendPasswordResetEmail
-        // pour éviter que permission-denied interrompe le flux
-
         return {
           'success': true,
-          'message': 'Un lien de réinitialisation a été envoyé à $cleanEmail. Vérifiez votre boîte mail (et vos spams).',
-        };
-      } else {
-        return {
-          'success': true,
-          'message': 'Lien de réinitialisation envoyé à $cleanEmail (mode demo).',
+          'message': 'Un lien de réinitialisation a été envoyé à $cleanEmail. Vérifiez votre boîte mail.',
         };
       }
+
+      return {
+        'success': false,
+        'message': 'Impossible d\'envoyer l\'email de réinitialisation.',
+      };
     } on FirebaseAuthException catch (e) {
-      if (e.code == 'user-not-found') {
-        return {
-          'success': false,
-          'message': 'Aucun compte trouvé avec cette adresse e-mail.',
-        };
-      }
       return {
         'success': false,
         'message': 'Erreur : ${e.message ?? e.code}',
@@ -2626,5 +2678,89 @@ class FirebaseService {
     }
 
     return Stream.value(List<Map<String, dynamic>>.from(_localFavoritesList));
+  }
+
+  // ── Disponibilité du Pro ──────────────────────────────────────────────────
+
+  /// Met à jour le champ `available` du pro connecté dans Firestore
+  Future<void> updateProAvailability(bool available) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    try {
+      if (_isFirebaseInitialized) {
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .update({
+          'available': available,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      }
+    } catch (e) {
+      debugPrint('Erreur updateProAvailability: $e');
+      rethrow;
+    }
+  }
+
+  // ── Services du Pro ───────────────────────────────────────────────────────
+
+  /// Stream des services créés par le pro connecté
+  Stream<List<Map<String, dynamic>>> streamMyServices() {
+    final user = FirebaseAuth.instance.currentUser;
+    if (_isFirebaseInitialized && user != null) {
+      return FirebaseFirestore.instance
+          .collection('pro_services')
+          .where('proId', isEqualTo: user.uid)
+          .snapshots()
+          .map((snap) => snap.docs.map((d) {
+                final data = d.data();
+                data['id'] = d.id;
+                return data;
+              }).toList());
+    }
+    return Stream.value([]);
+  }
+
+  /// Crée ou met à jour un service du pro connecté
+  Future<void> saveMyService({
+    String? id,
+    required String name,
+    required String description,
+    required double price,
+    String? photoUrl,
+  }) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) throw Exception('Non connecté');
+    final data = {
+      'proId': user.uid,
+      'name': name.trim(),
+      'description': description.trim(),
+      'price': price,
+      'photoUrl': photoUrl?.trim() ?? '',
+      'updatedAt': FieldValue.serverTimestamp(),
+    };
+    if (_isFirebaseInitialized) {
+      if (id != null && id.isNotEmpty) {
+        await FirebaseFirestore.instance
+            .collection('pro_services')
+            .doc(id)
+            .update(data);
+      } else {
+        data['createdAt'] = FieldValue.serverTimestamp();
+        await FirebaseFirestore.instance
+            .collection('pro_services')
+            .add(data);
+      }
+    }
+  }
+
+  /// Supprime un service du pro connecté
+  Future<void> deleteMyService(String serviceId) async {
+    if (_isFirebaseInitialized) {
+      await FirebaseFirestore.instance
+          .collection('pro_services')
+          .doc(serviceId)
+          .delete();
+    }
   }
 }

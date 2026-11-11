@@ -1297,9 +1297,9 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                             email: newAdminEmail,
                             password: autoPassword,
                           );
-                          bool emailSent = false;
+                          EmailSendResult? emailResult;
                           if (res['success'] == true) {
-                            emailSent = await EmailService.sendNewAdminCredentials(
+                            emailResult = await EmailService.sendNewAdminCredentials(
                               toEmail: newAdminEmail,
                               adminName: newAdminName,
                               generatedPassword: autoPassword,
@@ -1310,7 +1310,12 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
                           }
                           if (mounted) {
                             if (res['success'] == true) {
-                              _showAdminCreatedDialog(newAdminName, newAdminEmail, autoPassword, emailSent: emailSent);
+                              _showAdminCreatedDialog(
+                                newAdminName,
+                                newAdminEmail,
+                                emailSent: emailResult?.sent == true,
+                                emailError: emailResult?.error,
+                              );
                             } else {
                               messenger.showSnackBar(
                                 SnackBar(
@@ -1349,62 +1354,87 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
       },
     );
   }
-  void _showAdminCreatedDialog(String name, String email, String generatedPassword, {bool emailSent = false}) {
+  void _showAdminCreatedDialog(
+    String name,
+    String email, {
+    required bool emailSent,
+    String? emailError,
+  }) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         title: Row(
           children: [
-            Icon(Icons.check_circle_rounded, color: Color(0xFF10B981), size: 28),
-            SizedBox(width: 10),
-            Text('Admin créé avec succès !', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Le compte de $name a été activé.', style: const TextStyle(fontSize: 13.5, color: Color(0xFF475569))),
-            const SizedBox(height: 14),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF8FAFC),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: const Color(0xFFE2E8F0)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Email envoyé à :', style: TextStyle(fontSize: 12, color: Color(0xFF64748B))),
-                  Text(email, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
-                  const SizedBox(height: 10),
-                  Text('Mot de passe généré automatiquement :', style: TextStyle(fontSize: 12, color: Color(0xFF64748B))),
-                  const SizedBox(height: 4),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFEDE9FE),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      generatedPassword,
-                      style: const TextStyle(
-                        fontFamily: 'monospace',
-                        fontWeight: FontWeight.bold,
-                        fontSize: 15,
-                        color: Color(0xFF7C3AED),
-                      ),
-                    ),
-                  ),
-                ],
+            Icon(
+              emailSent ? Icons.check_circle_rounded : Icons.warning_rounded,
+              color: emailSent ? const Color(0xFF10B981) : Colors.deepOrange,
+              size: 28,
+            ),
+            const SizedBox(width: 10),
+            const Expanded(
+              child: Text(
+                'Compte administrateur créé',
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
               ),
             ),
-            const SizedBox(height: 12),
-            Text('Ce mot de passe a été expédié par e-mail au nouvel administrateur pour lui permettre de se connecter immédiatement.', style: TextStyle(fontSize: 12, color: Color(0xFF64748B))),
           ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Le compte de $name a été activé.',
+                style: const TextStyle(fontSize: 13.5, color: Color(0xFF475569)),
+              ),
+              const SizedBox(height: 14),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      emailSent ? 'Email d’accès envoyé à :' : 'Email non envoyé à :',
+                      style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                    ),
+                    Text(
+                      email,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF0F172A),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                emailSent
+                    ? 'Le mot de passe temporaire a été transmis uniquement dans cet email.'
+                    : 'Le compte est créé, mais le mot de passe temporaire n’a pas pu être envoyé par email.',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: emailSent ? const Color(0xFF64748B) : Colors.deepOrange,
+                ),
+              ),
+              if (!emailSent && emailError != null) ...[
+                const SizedBox(height: 8),
+                SelectableText(
+                  emailError,
+                  style: const TextStyle(fontSize: 12, color: Color(0xFF475569)),
+                ),
+              ],
+            ],
+          ),
         ),
         actions: [
           ElevatedButton(

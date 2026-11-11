@@ -3,6 +3,13 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
+class EmailSendResult {
+  final bool sent;
+  final String? error;
+
+  const EmailSendResult({required this.sent, this.error});
+}
+
 /// Service d'envoi d'emails via EmailJS REST API.
 ///
 /// EmailJS autorise les appels CORS depuis Flutter Web — aucun proxy nécessaire.
@@ -12,17 +19,32 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 /// Les clés sont lues depuis le fichier .env (voir .env.example à la racine).
 /// ─────────────────────────────────────────────────────────────────────────
 class EmailService {
-  static String get _serviceId  => dotenv.env['EMAILJS_SERVICE_ID']  ?? 'service_zg0xu1t';
-  static String get _templateId => dotenv.env['EMAILJS_TEMPLATE_ID'] ?? 'template_ppiwd7b';
-  static String get _publicKey  => dotenv.env['EMAILJS_PUBLIC_KEY']  ?? '8HgQH6Ou_rETVjTLu';
+  static String get _serviceId =>
+      (dotenv.env['EMAILJS_SERVICE_ID'] ?? '').trim();
+  static String get _templateId =>
+      (dotenv.env['EMAILJS_TEMPLATE_ID'] ?? '').trim();
+  static String get _publicKey =>
+      (dotenv.env['EMAILJS_PUBLIC_KEY'] ?? '').trim();
 
   /// Envoie un email de bienvenue à un nouvel administrateur.
   /// Le beau template HTML est entièrement généré ici, dans le code Dart.
-  static Future<bool> sendNewAdminCredentials({
+  static Future<EmailSendResult> sendNewAdminCredentials({
     required String toEmail,
     required String adminName,
     required String generatedPassword,
   }) async {
+    final missingSettings = <String>[
+      if (_serviceId.isEmpty) 'EMAILJS_SERVICE_ID',
+      if (_templateId.isEmpty) 'EMAILJS_TEMPLATE_ID',
+      if (_publicKey.isEmpty) 'EMAILJS_PUBLIC_KEY',
+    ];
+    if (missingSettings.isNotEmpty) {
+      return EmailSendResult(
+        sent: false,
+        error: 'Configuration manquante : ${missingSettings.join(', ')}',
+      );
+    }
+
     final htmlBody = _buildAdminWelcomeHtml(
       adminName: adminName,
       toEmail: toEmail,
@@ -48,20 +70,22 @@ class EmailService {
             'html_body': htmlBody,  // Le HTML complet passe ici
           },
         }),
-      );
+      ).timeout(const Duration(seconds: 20));
 
       if (response.statusCode == 200) {
         debugPrint('✅ Email envoyé avec succès à $toEmail via EmailJS !');
-        return true;
-      } else {
-        debugPrint('❌ EmailJS erreur ${response.statusCode}: ${response.body}');
-        _logFallback(toEmail, adminName, generatedPassword);
-        return false;
+        return const EmailSendResult(sent: true);
       }
+      final error =
+          'EmailJS (${response.statusCode}) : ${response.body.trim().isEmpty ? 'réponse vide' : response.body.trim()}';
+      debugPrint('❌ $error');
+      return EmailSendResult(sent: false, error: error);
     } catch (e) {
       debugPrint('❌ Erreur réseau EmailJS: $e');
-      _logFallback(toEmail, adminName, generatedPassword);
-      return false;
+      return EmailSendResult(
+        sent: false,
+        error: 'Erreur réseau EmailJS : $e',
+      );
     }
   }
 
@@ -248,12 +272,10 @@ class EmailService {
         return true;
       } else {
         debugPrint('❌ EmailJS erreur ${response.statusCode}: ${response.body}');
-        _logFallback(toEmail, userName, temporaryPassword);
         return false;
       }
     } catch (e) {
       debugPrint('❌ Erreur réseau EmailJS: $e');
-      _logFallback(toEmail, userName, temporaryPassword);
       return false;
     }
   }
@@ -345,15 +367,6 @@ class EmailService {
     } catch (e) {
       debugPrint('❌ Erreur réseau EmailJS: $e');
       return false;
-    }
-  }
-
-  static void _logFallback(String email, String name, String pwd) {
-    if (kDebugMode) {
-      debugPrint('=== [FALLBACK — EMAIL NON ENVOYÉ] ===');
-      debugPrint('Destinataire : $email ($name)');
-      debugPrint('Mot de passe : $pwd');
-      debugPrint('=====================================');
     }
   }
 

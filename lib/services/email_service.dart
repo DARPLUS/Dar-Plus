@@ -1,7 +1,9 @@
 import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 
 class EmailSendResult {
   final bool sent;
@@ -25,6 +27,58 @@ class EmailService {
       (dotenv.env['EMAILJS_TEMPLATE_ID'] ?? '').trim();
   static String get _publicKey =>
       (dotenv.env['EMAILJS_PUBLIC_KEY'] ?? '').trim();
+
+  static Future<EmailSendResult> sendFirebaseAuthEmail({
+    required String type,
+    required String toEmail,
+    required String userName,
+    String languageCode = 'fr',
+  }) async {
+    final missingSettings = <String>[
+      if (_serviceId.isEmpty) 'EMAILJS_SERVICE_ID',
+      if (_templateId.isEmpty) 'EMAILJS_TEMPLATE_ID',
+      if (_publicKey.isEmpty) 'EMAILJS_PUBLIC_KEY',
+    ];
+    if (missingSettings.isNotEmpty) {
+      return EmailSendResult(
+        sent: false,
+        error: 'Configuration manquante : ${missingSettings.join(', ')}',
+      );
+    }
+
+    try {
+      final result = await FirebaseFunctions.instance
+          .httpsCallable('sendFirebaseAuthEmail')
+          .call<Map<String, dynamic>>({
+            'type': type,
+            'email': toEmail.trim().toLowerCase(),
+            'userName': userName.trim(),
+            'languageCode': languageCode,
+            'emailJs': {
+              'serviceId': _serviceId,
+              'templateId': _templateId,
+              'publicKey': _publicKey,
+            },
+          });
+      if (result.data['sent'] == true) {
+        return const EmailSendResult(sent: true);
+      }
+      return const EmailSendResult(
+        sent: false,
+        error: 'L’envoi EmailJS n’a pas été confirmé.',
+      );
+    } on FirebaseFunctionsException catch (error) {
+      return EmailSendResult(
+        sent: false,
+        error: error.message ?? 'La fonction d’envoi EmailJS est indisponible.',
+      );
+    } catch (error) {
+      return EmailSendResult(
+        sent: false,
+        error: 'Impossible d’envoyer cet e-mail via EmailJS : $error',
+      );
+    }
+  }
 
   /// Envoie un email de bienvenue à un nouvel administrateur.
   /// Le beau template HTML est entièrement généré ici, dans le code Dart.
@@ -52,40 +106,37 @@ class EmailService {
     );
 
     try {
-      final response = await http.post(
-        Uri.parse('https://api.emailjs.com/api/v1.0/email/send'),
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode({
-          'service_id':  _serviceId,
-          'template_id': _templateId,
-          'user_id':     _publicKey,
-          'template_params': {
-            'to_email': toEmail,
-            'to_name':  adminName,
-            'from_name': 'DAR PLUS',
-            'name': 'DAR PLUS',
-            'subject':  'Vos accès Administrateur DAR PLUS',
-            'html_body': htmlBody,  // Le HTML complet passe ici
-          },
-        }),
-      ).timeout(const Duration(seconds: 20));
+      final response = await http
+          .post(
+            Uri.parse('https://api.emailjs.com/api/v1.0/email/send'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'service_id': _serviceId,
+              'template_id': _templateId,
+              'user_id': _publicKey,
+              'template_params': {
+                'to_email': toEmail,
+                'to_name': adminName,
+                'from_name': 'DAR PLUS',
+                'name': 'DAR PLUS',
+                'subject': 'Vos accès Administrateur DAR PLUS',
+                'html_body': htmlBody, // Le HTML complet passe ici
+              },
+            }),
+          )
+          .timeout(const Duration(seconds: 20));
 
       if (response.statusCode == 200) {
-        debugPrint('✅ Email envoyé avec succès à $toEmail via EmailJS !');
+        debugPrint('Email envoyé avec succès à $toEmail via EmailJS !');
         return const EmailSendResult(sent: true);
       }
       final error =
           'EmailJS (${response.statusCode}) : ${response.body.trim().isEmpty ? 'réponse vide' : response.body.trim()}';
-      debugPrint('❌ $error');
+      debugPrint('$error');
       return EmailSendResult(sent: false, error: error);
     } catch (e) {
-      debugPrint('❌ Erreur réseau EmailJS: $e');
-      return EmailSendResult(
-        sent: false,
-        error: 'Erreur réseau EmailJS : $e',
-      );
+      debugPrint('Erreur réseau EmailJS: $e');
+      return EmailSendResult(sent: false, error: 'Erreur réseau EmailJS : $e');
     }
   }
 
@@ -95,13 +146,75 @@ class EmailService {
     required String userName,
     required String resetLink,
   }) async {
+    if (_serviceId.isEmpty || _templateId.isEmpty || _publicKey.isEmpty) {
+      debugPrint('EmailJS n’est pas configuré pour la réinitialisation.');
+      return false;
+    }
     final htmlBody = _buildPasswordResetWithLinkHtml(
       userName: userName,
       toEmail: toEmail,
       resetLink: resetLink,
     );
     try {
-      final response = await http.post(
+      final response = await _sendTemplate(
+        toEmail: toEmail,
+        userName: userName,
+        subject: 'Réinitialisation de votre mot de passe DAR PLUS',
+        htmlBody: htmlBody,
+      );
+      if (response.statusCode == 200) {
+        debugPrint('Email reset avec lien envoyé à $toEmail');
+        return true;
+      }
+      debugPrint('EmailJS erreur ${response.statusCode}: ${response.body}');
+      return false;
+    } catch (e) {
+      debugPrint('Erreur EmailJS: $e');
+      return false;
+    }
+  }
+
+  static Future<bool> sendEmailVerificationWithLink({
+    required String toEmail,
+    required String userName,
+    required String verificationLink,
+  }) async {
+    if (_serviceId.isEmpty || _templateId.isEmpty || _publicKey.isEmpty) {
+      debugPrint('EmailJS n’est pas configuré pour la vérification.');
+      return false;
+    }
+    final safeName = const HtmlEscape().convert(userName);
+    final safeEmail = const HtmlEscape().convert(toEmail);
+    final safeLink = const HtmlEscape().convert(verificationLink);
+    final htmlBody = '''<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>body{margin:0;background:#f4f4f4;font-family:Arial,sans-serif;color:#334155}.card{max-width:560px;margin:32px auto;background:white;border-radius:16px;overflow:hidden}.header{background:#0D544E;color:white;padding:28px;text-align:center;font-size:24px;font-weight:bold}.body{padding:32px;line-height:1.6}.button{display:inline-block;background:#0D544E;color:#fff!important;text-decoration:none;padding:14px 28px;border-radius:8px;font-weight:bold}.fallback{font-size:12px;word-break:break-all;color:#64748b}</style></head>
+<body><div class="card"><div class="header">DAR PLUS</div><div class="body"><p>Bonjour $safeName,</p><p>Confirmez votre adresse e-mail <strong>$safeEmail</strong> pour activer votre compte client.</p><p style="text-align:center;margin:28px 0"><a class="button" href="$safeLink">Vérifier mon adresse e-mail</a></p><p>Si le bouton ne fonctionne pas, ouvrez ce lien :</p><p class="fallback"><a href="$safeLink">$safeLink</a></p><p>Si vous n’avez pas créé ce compte, ignorez cet e-mail.</p></div></div></body></html>''';
+    try {
+      final response = await _sendTemplate(
+        toEmail: toEmail,
+        userName: userName,
+        subject: 'Vérifiez votre adresse e-mail DAR PLUS',
+        htmlBody: htmlBody,
+      );
+      if (response.statusCode == 200) return true;
+      debugPrint(
+        'EmailJS vérification (${response.statusCode}): ${response.body}',
+      );
+      return false;
+    } catch (e) {
+      debugPrint('Erreur EmailJS vérification: $e');
+      return false;
+    }
+  }
+
+  static Future<http.Response> _sendTemplate({
+    required String toEmail,
+    required String userName,
+    required String subject,
+    required String htmlBody,
+  }) => http
+      .post(
         Uri.parse('https://api.emailjs.com/api/v1.0/email/send'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
@@ -113,22 +226,12 @@ class EmailService {
             'to_name': userName,
             'from_name': 'DAR PLUS',
             'name': 'DAR PLUS',
-            'subject': 'Réinitialisation de votre mot de passe DAR PLUS',
+            'subject': subject,
             'html_body': htmlBody,
           },
         }),
-      );
-      if (response.statusCode == 200) {
-        debugPrint('✅ Email reset avec lien envoyé à $toEmail');
-        return true;
-      }
-      debugPrint('❌ EmailJS erreur ${response.statusCode}: ${response.body}');
-      return false;
-    } catch (e) {
-      debugPrint('❌ Erreur EmailJS: $e');
-      return false;
-    }
-  }
+      )
+      .timeout(const Duration(seconds: 20));
 
   /// Template HTML avec vrai bouton lien de réinitialisation
   static String _buildPasswordResetWithLinkHtml({
@@ -171,10 +274,10 @@ class EmailService {
     </p>
     <p class="text">Cliquez sur le bouton ci-dessous pour choisir un nouveau mot de passe :</p>
     <div class="btn-wrap">
-      <a href="$resetLink" class="btn">🔐 Réinitialiser mon mot de passe</a>
+      <a href="$resetLink" class="btn">Réinitialiser mon mot de passe</a>
     </div>
     <div class="alert">
-      ⚠️ Si vous n'avez pas demandé cette réinitialisation, ignorez cet email. Votre mot de passe reste inchangé.
+      Si vous n'avez pas demandé cette réinitialisation, ignorez cet email. Votre mot de passe reste inchangé.
     </div>
     <p class="link-fallback">
       Si le bouton ne fonctionne pas, copiez ce lien dans votre navigateur :<br>
@@ -222,14 +325,14 @@ class EmailService {
         }),
       );
       if (response.statusCode == 200) {
-        debugPrint('✅ Email notification reset envoyé à $toEmail');
+        debugPrint('Email notification reset envoyé à $toEmail');
         return true;
       } else {
-        debugPrint('❌ EmailJS erreur ${response.statusCode}: ${response.body}');
+        debugPrint('EmailJS erreur ${response.statusCode}: ${response.body}');
         return false;
       }
     } catch (e) {
-      debugPrint('❌ Erreur réseau EmailJS: $e');
+      debugPrint('Erreur réseau EmailJS: $e');
       return false;
     }
   }
@@ -249,9 +352,7 @@ class EmailService {
     try {
       final response = await http.post(
         Uri.parse('https://api.emailjs.com/api/v1.0/email/send'),
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'service_id': _serviceId,
           'template_id': _templateId,
@@ -268,14 +369,16 @@ class EmailService {
       );
 
       if (response.statusCode == 200) {
-        debugPrint('✅ Email de réinitialisation envoyé avec succès à $toEmail via EmailJS !');
+        debugPrint(
+          'Email de réinitialisation envoyé avec succès à $toEmail via EmailJS !',
+        );
         return true;
       } else {
-        debugPrint('❌ EmailJS erreur ${response.statusCode}: ${response.body}');
+        debugPrint('EmailJS erreur ${response.statusCode}: ${response.body}');
         return false;
       }
     } catch (e) {
-      debugPrint('❌ Erreur réseau EmailJS: $e');
+      debugPrint('Erreur réseau EmailJS: $e');
       return false;
     }
   }
@@ -294,9 +397,7 @@ class EmailService {
     try {
       final response = await http.post(
         Uri.parse('https://api.emailjs.com/api/v1.0/email/send'),
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'service_id': _serviceId,
           'template_id': _templateId,
@@ -313,14 +414,16 @@ class EmailService {
       );
 
       if (response.statusCode == 200) {
-        debugPrint('✅ Email d\'acceptation envoyé avec succès à $toEmail via EmailJS !');
+        debugPrint(
+          'Email d\'acceptation envoyé avec succès à $toEmail via EmailJS !',
+        );
         return true;
       } else {
-        debugPrint('❌ EmailJS erreur ${response.statusCode}: ${response.body}');
+        debugPrint('EmailJS erreur ${response.statusCode}: ${response.body}');
         return false;
       }
     } catch (e) {
-      debugPrint('❌ Erreur réseau EmailJS: $e');
+      debugPrint('Erreur réseau EmailJS: $e');
       return false;
     }
   }
@@ -331,17 +434,12 @@ class EmailService {
     required String proName,
     required String reason,
   }) async {
-    final htmlBody = _buildProRejectedHtml(
-      proName: proName,
-      reason: reason,
-    );
+    final htmlBody = _buildProRejectedHtml(proName: proName, reason: reason);
 
     try {
       final response = await http.post(
         Uri.parse('https://api.emailjs.com/api/v1.0/email/send'),
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'service_id': _serviceId,
           'template_id': _templateId,
@@ -358,14 +456,16 @@ class EmailService {
       );
 
       if (response.statusCode == 200) {
-        debugPrint('✅ Email de refus envoyé avec succès à $toEmail via EmailJS !');
+        debugPrint(
+          'Email de refus envoyé avec succès à $toEmail via EmailJS !',
+        );
         return true;
       } else {
-        debugPrint('❌ EmailJS erreur ${response.statusCode}: ${response.body}');
+        debugPrint('EmailJS erreur ${response.statusCode}: ${response.body}');
         return false;
       }
     } catch (e) {
-      debugPrint('❌ Erreur réseau EmailJS: $e');
+      debugPrint('Erreur réseau EmailJS: $e');
       return false;
     }
   }
@@ -626,7 +726,7 @@ class EmailService {
       Un email contenant un <strong>lien sécurisé</strong> de réinitialisation vous a été envoyé par notre système. Ouvrez cet email et cliquez sur le lien pour définir un nouveau mot de passe.
     </p>
     <div class="alert">
-      ⚠️ Si vous n'avez pas demandé cette réinitialisation, ignorez simplement cet email. Votre mot de passe actuel reste inchangé.
+      Si vous n'avez pas demandé cette réinitialisation, ignorez simplement cet email. Votre mot de passe actuel reste inchangé.
     </div>
     <p class="text" style="font-size:12.5px; color:#94A3B8;">
       Le lien de réinitialisation expire dans <strong>1 heure</strong>. Si vous ne le trouvez pas, vérifiez votre dossier spam.

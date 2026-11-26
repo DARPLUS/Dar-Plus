@@ -1,5 +1,7 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../providers/theme_provider.dart';
 import '../providers/locale_provider.dart';
 import '../models/payment_model.dart';
@@ -21,17 +23,23 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
     context.watch<LocaleProvider>();
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    final scaffoldBg = isDark ? const Color(0xFF0F172A) : const Color(0xFFFAF7F2);
+    final scaffoldBg = isDark
+        ? const Color(0xFF0F172A)
+        : const Color(0xFFFAF7F2);
     final cardBg = isDark ? const Color(0xFF1E293B) : Colors.white;
-    final borderColor = isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
+    final borderColor = isDark
+        ? const Color(0xFF334155)
+        : const Color(0xFFE2E8F0);
     final textPrimary = isDark ? Colors.white : const Color(0xFF0F172A);
-    final textSecondary = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+    final textSecondary = isDark
+        ? const Color(0xFF94A3B8)
+        : const Color(0xFF64748B);
 
     return Scaffold(
       backgroundColor: scaffoldBg,
       appBar: AppBar(
         title: Text(
-          'Historique des paiements',
+          'payment_history_title'.tr(),
           style: TextStyle(
             color: textPrimary,
             fontWeight: FontWeight.bold,
@@ -41,7 +49,11 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
         elevation: 0,
         backgroundColor: Colors.transparent,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new_rounded, color: textPrimary, size: 20),
+          icon: Icon(
+            Icons.arrow_back_ios_new_rounded,
+            color: textPrimary,
+            size: 20,
+          ),
           onPressed: () => Navigator.of(context).pop(),
         ),
       ),
@@ -63,7 +75,9 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
           } else if (_selectedFilter == 'en_attente') {
             filteredPayments = allPayments.where((p) => p.isPending).toList();
           } else if (_selectedFilter == 'echec') {
-            filteredPayments = allPayments.where((p) => p.isFailed || p.isCancelled).toList();
+            filteredPayments = allPayments
+                .where((p) => p.isFailed || p.isCancelled)
+                .toList();
           }
 
           // Calcul du total réglé avec succès
@@ -75,7 +89,10 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
             children: [
               // 1. CARTE RÉCAPITULATIF TOTAL DÉPENSÉ
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 18,
+                  vertical: 10,
+                ),
                 child: Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(18),
@@ -100,8 +117,8 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
-                            'Total réglé sur DAR PLUS',
+                          Text(
+                            'payment_history_total_paid'.tr(),
                             style: TextStyle(
                               color: Colors.white70,
                               fontSize: 13,
@@ -126,7 +143,11 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
                           color: Colors.white.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(16),
                         ),
-                        child: const Icon(Icons.receipt_long_rounded, color: Colors.white, size: 28),
+                        child: const Icon(
+                          Icons.receipt_long_rounded,
+                          color: Colors.white,
+                          size: 28,
+                        ),
                       ),
                     ],
                   ),
@@ -136,16 +157,52 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
               // 2. FILTRES RAPIDES (CHIPS)
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 18,
+                  vertical: 8,
+                ),
                 child: Row(
                   children: [
-                    _buildFilterChip('tous', 'Tous (${allPayments.length})', isDark),
+                    _buildFilterChip(
+                      'tous',
+                      'payment_filter_all'.tr(
+                        namedArgs: {'count': '${allPayments.length}'},
+                      ),
+                      isDark,
+                    ),
                     const SizedBox(width: 8),
-                    _buildFilterChip('succes', 'Payés (${allPayments.where((p) => p.isSuccess).length})', isDark),
+                    _buildFilterChip(
+                      'succes',
+                      'payment_filter_paid'.tr(
+                        namedArgs: {
+                          'count':
+                              '${allPayments.where((p) => p.isSuccess).length}',
+                        },
+                      ),
+                      isDark,
+                    ),
                     const SizedBox(width: 8),
-                    _buildFilterChip('en_attente', 'En attente (${allPayments.where((p) => p.isPending).length})', isDark),
+                    _buildFilterChip(
+                      'en_attente',
+                      'payment_filter_pending'.tr(
+                        namedArgs: {
+                          'count':
+                              '${allPayments.where((p) => p.isPending).length}',
+                        },
+                      ),
+                      isDark,
+                    ),
                     const SizedBox(width: 8),
-                    _buildFilterChip('echec', 'Échecs / Annulés (${allPayments.where((p) => p.isFailed || p.isCancelled).length})', isDark),
+                    _buildFilterChip(
+                      'echec',
+                      'payment_filter_failed'.tr(
+                        namedArgs: {
+                          'count':
+                              '${allPayments.where((p) => p.isFailed || p.isCancelled).length}',
+                        },
+                      ),
+                      isDark,
+                    ),
                   ],
                 ),
               ),
@@ -160,14 +217,21 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
                             Container(
                               padding: const EdgeInsets.all(20),
                               decoration: BoxDecoration(
-                                color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0).withValues(alpha: 0.5),
+                                color: isDark
+                                    ? const Color(0xFF1E293B)
+                                    : const Color(0xFFE2E8F0)
+                                          .withValues(alpha: 0.5),
                                 shape: BoxShape.circle,
                               ),
-                              child: Icon(Icons.payment_rounded, size: 48, color: textSecondary),
+                              child: Icon(
+                                Icons.payment_rounded,
+                                size: 48,
+                                color: textSecondary,
+                              ),
                             ),
                             const SizedBox(height: 16),
                             Text(
-                              'Aucune transaction trouvée',
+                              'payment_history_empty_title'.tr(),
                               style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
@@ -176,19 +240,32 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
                             ),
                             const SizedBox(height: 6),
                             Text(
-                              'Vos reçus de paiement s\'afficheront ici.',
-                              style: TextStyle(fontSize: 13, color: textSecondary),
+                              'payment_history_empty_body'.tr(),
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: textSecondary,
+                              ),
                             ),
                           ],
                         ),
                       )
                     : ListView.builder(
-                        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 18,
+                          vertical: 8,
+                        ),
                         physics: const BouncingScrollPhysics(),
                         itemCount: filteredPayments.length,
                         itemBuilder: (context, index) {
                           final payment = filteredPayments[index];
-                          return _buildPaymentCard(payment, cardBg, borderColor, textPrimary, textSecondary, isDark);
+                          return _buildPaymentCard(
+                            payment,
+                            cardBg,
+                            borderColor,
+                            textPrimary,
+                            textSecondary,
+                            isDark,
+                          );
                         },
                       ),
               ),
@@ -221,14 +298,23 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
           style: TextStyle(
             fontSize: 12.5,
             fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-            color: isSelected ? Colors.white : (isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B)),
+            color: isSelected
+                ? Colors.white
+                : (isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B)),
           ),
         ),
       ),
     );
   }
 
-  Widget _buildPaymentCard(PaymentModel payment, Color cardBg, Color borderColor, Color textPrimary, Color textSecondary, bool isDark) {
+  Widget _buildPaymentCard(
+    PaymentModel payment,
+    Color cardBg,
+    Color borderColor,
+    Color textPrimary,
+    Color textSecondary,
+    bool isDark,
+  ) {
     Color statusBg;
     Color statusText;
     IconData statusIcon;
@@ -269,7 +355,13 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(18),
-          onTap: () => _showReceiptDetailsSheet(payment, cardBg, borderColor, textPrimary, textSecondary),
+          onTap: () => _showReceiptDetailsSheet(
+            payment,
+            cardBg,
+            borderColor,
+            textPrimary,
+            textSecondary,
+          ),
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
@@ -289,7 +381,10 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
                       ),
                     ),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
                         color: statusBg,
                         borderRadius: BorderRadius.circular(20),
@@ -300,7 +395,7 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
                           Icon(statusIcon, size: 13, color: statusText),
                           const SizedBox(width: 4),
                           Text(
-                            payment.status.labelFr,
+                            'payment_status_${payment.status.code}'.tr(),
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.bold,
@@ -325,7 +420,11 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
                   children: [
                     Row(
                       children: [
-                        Icon(Icons.calendar_today_rounded, size: 13, color: textSecondary),
+                        Icon(
+                          Icons.calendar_today_rounded,
+                          size: 13,
+                          color: textSecondary,
+                        ),
                         const SizedBox(width: 6),
                         Text(
                           _formatDate(payment.createdAt),
@@ -338,7 +437,9 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
-                        color: payment.isSuccess ? const Color(0xFF0D544E) : textPrimary,
+                        color: payment.isSuccess
+                            ? const Color(0xFF0D544E)
+                            : textPrimary,
                       ),
                     ),
                   ],
@@ -351,7 +452,13 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
     );
   }
 
-  void _showReceiptDetailsSheet(PaymentModel payment, Color cardBg, Color borderColor, Color textPrimary, Color textSecondary) {
+  void _showReceiptDetailsSheet(
+    PaymentModel payment,
+    Color cardBg,
+    Color borderColor,
+    Color textPrimary,
+    Color textSecondary,
+  ) {
     showModalBottomSheet(
       context: context,
       backgroundColor: cardBg,
@@ -380,7 +487,7 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'Reçu de transaction',
+                    'payment_receipt_title'.tr(),
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
@@ -394,38 +501,79 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
                 ],
               ),
               const SizedBox(height: 14),
-              _buildModalRow('Référence serveur', payment.transactionRef ?? payment.id, textPrimary, isSmall: true),
+              _buildModalRow(
+                'payment_reference'.tr(),
+                payment.transactionRef ?? payment.id,
+                textPrimary,
+                isSmall: true,
+              ),
               const Divider(height: 16),
-              _buildModalRow('Prestation', payment.serviceType, textPrimary),
+              _buildModalRow(
+                'booking_provided_service'.tr(),
+                payment.serviceType,
+                textPrimary,
+              ),
               const SizedBox(height: 8),
-              _buildModalRow('Artisan', payment.proName, textPrimary),
+              _buildModalRow('professional'.tr(), payment.proName, textPrimary),
               const SizedBox(height: 8),
-              _buildModalRow('Moyen de paiement', payment.paymentMethod, textPrimary),
+              _buildModalRow(
+                'payment_method_heading'.tr(),
+                payment.paymentMethod,
+                textPrimary,
+              ),
               const SizedBox(height: 8),
-              _buildModalRow('Statut officiel', payment.status.labelFr, textPrimary),
+              _buildModalRow(
+                'payment_status_heading'.tr(),
+                'payment_status_${payment.status.code}'.tr(),
+                textPrimary,
+              ),
               if (payment.failureReason != null) ...[
                 const SizedBox(height: 8),
-                _buildModalRow('Motif', payment.failureReason!, const Color(0xFFEF4444)),
+                _buildModalRow(
+                  'payment_reason'.tr(),
+                  payment.failureReason!,
+                  const Color(0xFFEF4444),
+                ),
               ],
               const Divider(height: 16),
-              _buildModalRow('Prestation de base', '${payment.baseAmount.toStringAsFixed(3)} DT', textSecondary),
+              _buildModalRow(
+                'payment_base_service'.tr(),
+                '${payment.baseAmount.toStringAsFixed(3)} DT',
+                textSecondary,
+              ),
               const SizedBox(height: 6),
-              _buildModalRow('Frais de service & garantie', '+${payment.feeAmount.toStringAsFixed(3)} DT', textSecondary),
+              _buildModalRow(
+                'payment_service_fee'.tr(),
+                '+${payment.feeAmount.toStringAsFixed(3)} DT',
+                textSecondary,
+              ),
               if (payment.discountAmount > 0) ...[
                 const SizedBox(height: 6),
-                _buildModalRow('Réduction', '-${payment.discountAmount.toStringAsFixed(3)} DT', const Color(0xFF10B981)),
+                _buildModalRow(
+                  'payment_discount'.tr(),
+                  '-${payment.discountAmount.toStringAsFixed(3)} DT',
+                  const Color(0xFF10B981),
+                ),
               ],
               const Divider(height: 16),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'Total prélevé',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: textPrimary),
+                    'payment_total_charged'.tr(),
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: textPrimary,
+                    ),
                   ),
                   Text(
                     '${payment.totalAmount.toStringAsFixed(3)} DT',
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF0D544E)),
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF0D544E),
+                    ),
                   ),
                 ],
               ),
@@ -437,11 +585,19 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
     );
   }
 
-  Widget _buildModalRow(String label, String value, Color color, {bool isSmall = false}) {
+  Widget _buildModalRow(
+    String label,
+    String value,
+    Color color, {
+    bool isSmall = false,
+  }) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(label, style: const TextStyle(fontSize: 13, color: Color(0xFF64748B))),
+        Text(
+          label,
+          style: const TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+        ),
         Text(
           value,
           style: TextStyle(

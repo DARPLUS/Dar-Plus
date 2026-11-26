@@ -1,11 +1,20 @@
 import 'dart:async';
 import 'dart:convert';
+
 import 'package:flutter/material.dart';
+
+import 'package:easy_localization/easy_localization.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/services.dart';
+
 import '../services/firebase_service.dart';
 import '../theme/app_theme.dart';
 import '../core/localization/app_localizations.dart';
 import '../widgets/pro_avatar_widget.dart';
+
 import 'package:provider/provider.dart';
+
 import '../providers/theme_provider.dart';
 import '../providers/locale_provider.dart';
 import 'client_profile_screen.dart';
@@ -13,6 +22,13 @@ import 'catalog_search_screen.dart';
 import 'urgency_screen.dart';
 import 'map_screen.dart';
 import 'service_detail_screen.dart';
+import 'estimate_screen.dart';
+import '../widgets/client_banner_ad.dart';
+import '../core/routing/app_routes.dart';
+import 'booking_chat_screen.dart';
+import 'booking_detail_screen.dart';
+import 'client_messages_screen.dart';
+import 'booking_rating_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final String userName;
@@ -36,37 +52,54 @@ class _HomeScreenState extends State<HomeScreen> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   int _currentBottomNavIndex = 0;
   String? _clientPhotoBase64;
+  String? _clientPhotoUrl;
+  late String _displayName;
   final Set<String> _favIds = {};
 
   StreamSubscription<List<Map<String, dynamic>>>? _categoriesSub;
+  StreamSubscription<int>? _unreadMessagesSub;
+  StreamSubscription<List<Map<String, dynamic>>>? _completedBookingsSub;
+  final Set<String> _ratingPromptedBookingIds = {};
+  final Map<String, String> _observedBookingStatuses = {};
+  bool _hasLoadedInitialBookingStatuses = false;
+  Map<String, dynamic>? _nextRatingPrompt;
+  bool _isRatingPromptOpen = false;
+  int _unreadMessages = 0;
 
   String _getLocalizedCategoryName(String original) {
     final lower = original.trim().toLowerCase();
-    if (lower.contains('plomb')) return context.tr('cat_plumbing');
-    if (lower.contains('élec') || lower.contains('elec')) return context.tr('cat_electricity');
-    if (lower.contains('clim')) return context.tr('cat_ac');
-    if (lower.contains('peint')) return context.tr('cat_paint');
-    if (lower.contains('menuis')) return context.tr('cat_carpentry');
-    if (lower.contains('nettoy')) return context.tr('cat_cleaning');
-    if (lower.contains('jardin')) return context.tr('cat_gardening');
-    if (lower.contains('serrur')) return context.tr('cat_locksmith');
-    if (lower == 'plus' || lower.contains('autre')) return context.tr('cat_more');
+    if (lower.contains('plomb')) return 'cat_plumbing'.tr();
+    if (lower.contains('élec') || lower.contains('elec')) {
+      return 'cat_electricity'.tr();
+    }
+    if (lower.contains('clim')) return 'cat_ac'.tr();
+    if (lower.contains('peint')) return 'cat_paint'.tr();
+    if (lower.contains('menuis')) return 'cat_carpentry'.tr();
+    if (lower.contains('nettoy')) return 'cat_cleaning'.tr();
+    if (lower.contains('jardin')) return 'cat_gardening'.tr();
+    if (lower.contains('serrur')) return 'cat_locksmith'.tr();
+    if (lower == 'plus' || lower.contains('autre')) return 'cat_more'.tr();
     return original;
   }
 
   @override
   void initState() {
     super.initState();
+    _displayName = widget.userName;
     _currentBottomNavIndex = widget.initialTab;
     _loadProfilePhoto();
     _listenToCategories();
     _loadFavorites();
+    _listenUnreadMessages();
+    _listenCompletedBookingsForRating();
   }
 
   void _listenToCategories() {
     _categoriesSub = FirebaseService().streamCategories().listen((list) {
       if (mounted && list.isNotEmpty) {
-        final activeCategories = list.where((c) => c['isActive'] == true).toList();
+        final activeCategories = list
+            .where((c) => c['isActive'] == true)
+            .toList();
         if (activeCategories.isNotEmpty) {
           setState(() {
             _categories.clear();
@@ -94,21 +127,138 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     _categoriesSub?.cancel();
+    _unreadMessagesSub?.cancel();
+    _completedBookingsSub?.cancel();
     super.dispose();
+  }
+
+  void _listenCompletedBookingsForRating() {
+    _completedBookingsSub = FirebaseService().streamClientBookings().listen(
+      (bookings) {
+        if (!_hasLoadedInitialBookingStatuses) {
+          _hasLoadedInitialBookingStatuses = true;
+          for (final booking in bookings) {
+            final id = booking['id']?.toString() ?? '';
+            if (id.isNotEmpty) {
+              _observedBookingStatuses[id] =
+                  booking['status']?.toString() ?? '';
+            }
+          }
+          return;
+        }
+        for (final booking in bookings) {
+          final bookingId = booking['id']?.toString() ?? '';
+          if (bookingId.isEmpty) continue;
+          final previousStatus = _observedBookingStatuses[bookingId];
+          final currentStatus = booking['status']?.toString() ?? '';
+          _observedBookingStatuses[bookingId] = currentStatus;
+          if (currentStatus != 'terminee' ||
+              previousStatus == 'terminee' ||
+              booking['clientReviewSubmitted'] == true ||
+              _ratingPromptedBookingIds.contains(bookingId))
+            continue;
+          _ratingPromptedBookingIds.add(bookingId);
+          _nextRatingPrompt = booking;
+          break;
+        }
+        _openNextRatingPrompt();
+      },
+      onError: (Object error) {
+        debugPrint('Erreur écoute des interventions terminées : $error');
+      },
+    );
+  }
+
+  void _openNextRatingPrompt() {
+    if (!mounted || _isRatingPromptOpen || _nextRatingPrompt == null) return;
+    final booking = _nextRatingPrompt!;
+    _nextRatingPrompt = null;
+    _isRatingPromptOpen = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) {
+        _isRatingPromptOpen = false;
+        return;
+      }
+      await Navigator.of(context).push<bool>(
+        MaterialPageRoute(
+          builder: (_) => BookingRatingScreen(
+            booking: booking,
+            isProfessional: false,
+            alreadySubmitted: false,
+          ),
+        ),
+      );
+      _isRatingPromptOpen = false;
+      _openNextRatingPrompt();
+    });
+  }
+
+  void _listenUnreadMessages() {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    _unreadMessagesSub = FirebaseService()
+        .streamUnreadMessageCount(isPro: false)
+        .listen((count) {
+          if (mounted) setState(() => _unreadMessages = count);
+        });
   }
 
   Future<void> _loadProfilePhoto() async {
     try {
       final data = await FirebaseService().getCurrentUserData();
       if (data != null && mounted) {
-        final photo = data['photoBase64'] as String?;
-        if (photo != null && photo.trim().isNotEmpty) {
-          setState(() {
-            _clientPhotoBase64 = photo.trim();
-          });
-        }
+        final base64Photo = data['photoBase64']?.toString().trim() ?? '';
+        final urlPhoto = data['photoUrl']?.toString().trim() ?? '';
+        setState(() {
+          final fullName = data['fullName']?.toString().trim() ?? '';
+          if (fullName.isNotEmpty) _displayName = fullName;
+          _clientPhotoBase64 = base64Photo.isEmpty ? null : base64Photo;
+          _clientPhotoUrl = urlPhoto.isEmpty ? null : urlPhoto;
+        });
       }
     } catch (_) {}
+  }
+
+  /// Affiche la photo du client (base64 ou URL Storage/Google), sinon ses initiales.
+  Widget _buildClientAvatarContent() {
+    final raw = _clientPhotoBase64?.trim() ?? '';
+    if (raw.isNotEmpty) {
+      try {
+        return Image.memory(
+          base64Decode(raw),
+          width: 44,
+          height: 44,
+          fit: BoxFit.cover,
+          errorBuilder: (_, _, _) => _buildClientAvatarUrl(),
+        );
+      } catch (_) {}
+    }
+    return _buildClientAvatarUrl();
+  }
+
+  Widget _buildClientAvatarUrl() {
+    final url = _clientPhotoUrl?.trim() ?? '';
+    if (url.isNotEmpty) {
+      return Image.network(
+        url,
+        width: 44,
+        height: 44,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => _buildClientInitials(),
+      );
+    }
+    return _buildClientInitials();
+  }
+
+  Widget _buildClientInitials() {
+    return Text(
+      _displayName.isNotEmpty ? _displayName[0].toUpperCase() : 'C',
+      style: const TextStyle(
+        color: Colors.white,
+        fontWeight: FontWeight.bold,
+        fontSize: 18,
+      ),
+    );
   }
 
   Future<void> _loadFavorites() async {
@@ -126,21 +276,29 @@ class _HomeScreenState extends State<HomeScreen> {
       });
     } catch (_) {}
   }
-  String _selectedLocation = 'Tunis, El Menzah';
 
-  // 3 Quick Actions without the AI icon as requested
+  // Quick actions shown below the home header.
   final List<Map<String, dynamic>> _quickActions = [
     {
+      'id': 'urgent',
       'title': 'Urgence',
       'icon': Icons.notifications_active_rounded,
       'color': const Color(0xFFDC3522),
     },
     {
+      'id': 'ai',
+      'title': 'IA',
+      'icon': Icons.smart_toy_rounded,
+      'color': const Color(0xFF148C84),
+    },
+    {
+      'id': 'estimate',
       'title': 'Estimer',
       'icon': Icons.paid_rounded,
       'color': const Color(0xFFDE6D1B),
     },
     {
+      'id': 'map',
       'title': 'Carte',
       'icon': Icons.map_rounded,
       'color': const Color(0xFF1D83E0),
@@ -151,7 +309,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final List<Map<String, dynamic>> _categories = [
     {
       'name': 'Plomberie',
-      'icon': Icons.build_rounded,
+      'icon': Icons.plumbing,
       'bgColor': const Color(0xFFEEF2FF),
       'iconColor': const Color(0xFF6366F1),
     },
@@ -181,7 +339,7 @@ class _HomeScreenState extends State<HomeScreen> {
     },
     {
       'name': 'Électricité',
-      'icon': Icons.bolt_rounded,
+      'icon': Icons.electrical_services,
       'bgColor': const Color(0xFFFEF3C7),
       'iconColor': const Color(0xFFD97706),
     },
@@ -205,83 +363,10 @@ class _HomeScreenState extends State<HomeScreen> {
     },
   ];
 
-
   void _showProDetails(Map<String, dynamic> pro) {
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (_) => ServiceDetailScreen(proData: pro),
-      ),
-    );
-  }
-
-  void _showLocationPicker() {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (_) {
-        final cities = [
-          'Tunis, El Menzah',
-          'Tunis, Les Berges du Lac',
-          'Tunis, Ennasr 2',
-          'La Marsa',
-          'Carthage',
-          'Ariana Ville',
-          'Sousse, Kantaoui',
-          'Sfax Ville',
-        ];
-
-        return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Choisir votre zone',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: isDark ? Colors.white : AppTheme.titleColor,
-                  fontFamily: 'serif',
-                ),
-              ),
-              const SizedBox(height: 14),
-              ...cities.map((city) {
-                final isSelected = city == _selectedLocation;
-                return ListTile(
-                  leading: const Icon(Icons.location_on_rounded,
-                      color: Color(0xFF0D544E)),
-                  title: Text(
-                    city,
-                    style: TextStyle(
-                      fontWeight:
-                          isSelected ? FontWeight.bold : FontWeight.normal,
-                      color: isSelected
-                          ? const Color(0xFF0D544E)
-                          : (isDark ? Colors.white : AppTheme.titleColor),
-                    ),
-                  ),
-                  trailing: isSelected
-                      ? const Icon(Icons.check_rounded,
-                          color: Color(0xFF0D544E))
-                      : null,
-                  onTap: () {
-                    setState(() {
-                      _selectedLocation = city;
-                    });
-                    Navigator.pop(context);
-                  },
-                );
-              }),
-            ],
-          ),
-        );
-      },
+      MaterialPageRoute(builder: (_) => ServiceDetailScreen(proData: pro)),
     );
   }
 
@@ -304,14 +389,17 @@ class _HomeScreenState extends State<HomeScreen> {
       key: _scaffoldKey,
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: _buildCurrentBody(topPadding),
-      bottomNavigationBar: _buildBottomNav(),
+      bottomNavigationBar: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [const ClientBannerAd(), _buildBottomNav()],
+      ),
     );
   }
 
   Widget _buildCurrentBody(double topPadding) {
-    if (_currentBottomNavIndex == 4) {
+    if (_currentBottomNavIndex == 5) {
       return ClientProfileScreen(
-        userName: widget.userName,
+        userName: _displayName,
         userEmail: widget.userEmail ?? '',
         userPhone: widget.userPhone ?? '',
       );
@@ -323,6 +411,9 @@ class _HomeScreenState extends State<HomeScreen> {
       return _buildFavoritesScreenPlaceholder(topPadding);
     }
     if (_currentBottomNavIndex == 3) {
+      return const ClientMessagesScreen(embedded: true);
+    }
+    if (_currentBottomNavIndex == 4) {
       return _buildHistoryScreenPlaceholder(topPadding);
     }
 
@@ -344,70 +435,87 @@ class _HomeScreenState extends State<HomeScreen> {
               right: 20,
               bottom: 20,
             ),
-            decoration: const BoxDecoration(
-              color: Color(0xFF0D544E),
-            ),
+            decoration: const BoxDecoration(color: Color(0xFF0D544E)),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Top Row: Greetings + Bell + Avatar
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Row(
-                      children: [
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: Image.asset(
-                            'assets/images/logo.png',
-                            width: 40,
-                            height: 40,
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) => Container(
+                    Expanded(
+                      child: Row(
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: Image.asset(
+                              'assets/images/logo.png',
                               width: 40,
                               height: 40,
-                              decoration: const BoxDecoration(
-                                color: Color(0xFFE89838),
-                                shape: BoxShape.circle,
-                              ),
-                              alignment: Alignment.center,
-                              child: const Text('D+', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) =>
+                                  Container(
+                                    width: 40,
+                                    height: 40,
+                                    decoration: const BoxDecoration(
+                                      color: Color(0xFFE89838),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    alignment: Alignment.center,
+                                    child: const Text(
+                                      'D+',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 12),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              context.tr('good_morning'),
-                              style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.8),
-                                fontSize: 13,
-                                fontWeight: FontWeight.normal,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Row(
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  widget.userName,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 22,
-                                    fontWeight: FontWeight.bold,
-                                    letterSpacing: -0.2,
+                                  (DateTime.now().hour < 18
+                                          ? 'good_morning'
+                                          : 'good_evening')
+                                      .tr(),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: Colors.white.withValues(alpha: 0.8),
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.normal,
                                   ),
                                 ),
-                                const SizedBox(width: 8),
-                                const Icon(Icons.waving_hand_rounded,
-                                    color: Color(0xFFFFD166), size: 20),
+                                const SizedBox(height: 2),
+                                Row(
+                                  children: [
+                                    Flexible(
+                                      child: Text(
+                                        _displayName,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 22,
+                                          fontWeight: FontWeight.bold,
+                                          letterSpacing: -0.2,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                  ],
+                                ),
                               ],
                             ),
-                          ],
-                        ),
-                      ],
+                          ),
+                        ],
+                      ),
                     ),
+                    const SizedBox(width: 8),
                     Row(
                       children: [
                         // Notification Bell - opens a notifications panel (not admin)
@@ -416,14 +524,21 @@ class _HomeScreenState extends State<HomeScreen> {
                             showModalBottomSheet(
                               context: context,
                               isScrollControlled: true,
-                              backgroundColor: Theme.of(context).brightness == Brightness.dark
+                              backgroundColor:
+                                  Theme.of(context).brightness ==
+                                      Brightness.dark
                                   ? const Color(0xFF1E293B)
                                   : Colors.white,
                               shape: const RoundedRectangleBorder(
-                                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                                borderRadius: BorderRadius.vertical(
+                                  top: Radius.circular(24),
+                                ),
                               ),
                               builder: (sheetCtx) => _NotificationsSheet(
-                                isDark: Theme.of(context).brightness == Brightness.dark,
+                                isDark:
+                                    Theme.of(context).brightness ==
+                                    Brightness.dark,
+                                clientName: _displayName,
                               ),
                             );
                           },
@@ -435,7 +550,8 @@ class _HomeScreenState extends State<HomeScreen> {
                               shape: BoxShape.circle,
                             ),
                             child: StreamBuilder<List<Map<String, dynamic>>>(
-                              stream: FirebaseService().streamClientNotifications(),
+                              stream: FirebaseService()
+                                  .streamClientNotifications(),
                               builder: (_, snap) {
                                 final unread = (snap.data ?? [])
                                     .where((n) => n['isRead'] != true)
@@ -481,7 +597,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         GestureDetector(
                           onTap: () {
                             setState(() {
-                              _currentBottomNavIndex = 4;
+                              _currentBottomNavIndex = 5;
                             });
                           },
                           child: Container(
@@ -495,25 +611,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                 color: Colors.white.withValues(alpha: 0.3),
                                 width: 2,
                               ),
-                              image: _clientPhotoBase64 != null && _clientPhotoBase64!.isNotEmpty
-                                  ? DecorationImage(
-                                      image: MemoryImage(base64Decode(_clientPhotoBase64!)),
-                                      fit: BoxFit.cover,
-                                    )
-                                  : null,
                             ),
-                            child: _clientPhotoBase64 == null || _clientPhotoBase64!.isEmpty
-                                ? Text(
-                                    widget.userName.isNotEmpty
-                                        ? widget.userName[0].toUpperCase()
-                                        : 'C',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 18,
-                                    ),
-                                  )
-                                : null,
+                            clipBehavior: Clip.antiAlias,
+                            child: _buildClientAvatarContent(),
                           ),
                         ),
                       ],
@@ -547,13 +647,15 @@ class _HomeScreenState extends State<HomeScreen> {
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (_) => CatalogSearchScreen(initialSearch: val.trim()),
+                                  builder: (_) => CatalogSearchScreen(
+                                    initialSearch: val.trim(),
+                                  ),
                                 ),
                               );
                             }
                           },
                           decoration: InputDecoration(
-                            hintText: context.tr('search_hint'),
+                            hintText: 'search_hint'.tr(),
                             hintStyle: TextStyle(
                               color: Colors.white.withValues(alpha: 0.75),
                               fontSize: 14,
@@ -565,87 +667,24 @@ class _HomeScreenState extends State<HomeScreen> {
                     ],
                   ),
                 ),
-
-                const SizedBox(height: 14),
-
-                // Location and Loyalty Points Row (matches screenshot)
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    // Location selector
-                    GestureDetector(
-                      onTap: _showLocationPicker,
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.location_on_rounded,
-                            color: Color(0xFFF43F5E),
-                            size: 18,
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            _selectedLocation,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 13.5,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          const Icon(
-                            Icons.arrow_drop_down_rounded,
-                            color: Colors.white70,
-                            size: 20,
-                          ),
-                        ],
-                      ),
-                    ),
-                    // Points Badge
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF17605A),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: const Row(
-                        children: [
-                          Icon(
-                            Icons.timer_rounded,
-                            color: Color(0xFF818CF8),
-                            size: 16,
-                          ),
-                          SizedBox(width: 6),
-                          Text(
-                            '820 pts',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 12.5,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
               ],
             ),
           ),
 
-          // 2. Quick Action Cards (Urgence, Estimer, Carte) - WITHOUT AI as requested
+          // 2. Quick action cards
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
             child: Row(
               children: _quickActions.map((action) {
+                final actionId = action['id'] as String;
                 final color = action['color'] as Color;
                 return Expanded(
                   child: Container(
                     margin: const EdgeInsets.symmetric(horizontal: 5),
-                    height: 88,
+                    height: 72,
                     decoration: BoxDecoration(
                       color: color,
-                      borderRadius: BorderRadius.circular(18),
+                      borderRadius: BorderRadius.circular(16),
                       boxShadow: [
                         BoxShadow(
                           color: color.withValues(alpha: 0.3),
@@ -658,45 +697,52 @@ class _HomeScreenState extends State<HomeScreen> {
                       color: Colors.transparent,
                       child: InkWell(
                         onTap: () {
-                          if (action['title'] == 'Urgence') {
+                          if (actionId == 'urgent') {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
                                 builder: (_) => const UrgencyScreen(),
                               ),
                             );
-                          } else if (action['title'] == 'Carte') {
+                          } else if (actionId == 'ai') {
+                            Navigator.of(context)
+                                .pushNamed(AppRoutes.aiAssistant);
+                          } else if (actionId == 'map') {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
                                 builder: (_) => const MapScreen(),
                               ),
                             );
-                          } else {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('Action : ${action['title']}'),
-                                backgroundColor: color,
+                          } else if (actionId == 'estimate') {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const EstimateScreen(),
                               ),
                             );
                           }
                         },
-                        borderRadius: BorderRadius.circular(18),
+                        borderRadius: BorderRadius.circular(16),
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Icon(
                               action['icon'] as IconData,
                               color: Colors.white,
-                              size: 28,
+                              size: 24,
                             ),
                             const SizedBox(height: 6),
                             Text(
-                              action['title'] == 'Urgence'
-                                  ? context.tr('action_urgent')
-                                  : (action['title'] == 'Estimer'
-                                      ? context.tr('action_estimate')
-                                      : context.tr('action_map')),
+                              switch (actionId) {
+                                'urgent' => 'action_urgent'.tr(),
+                                'ai' => 'action_ai'.tr(),
+                                'estimate' => 'action_estimate'.tr(),
+                                _ => 'action_map'.tr(),
+                              },
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.center,
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 13,
@@ -713,201 +759,126 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
 
-          // 3. Loyalty & Coupons row (matches screenshot)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              children: [
-                // Argent 820 pts
-                Expanded(
-                  flex: 3,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 12),
-                    decoration: BoxDecoration(
-                      color: isDark ? const Color(0xFF1E293B) : const Color(0xFFECE7DF),
-                      borderRadius: BorderRadius.circular(16),
-                      border: isDark ? Border.all(color: const Color(0xFF334155)) : null,
+          // 3. Real active promotion (when available)
+          StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+            stream: FirebaseFirestore.instance
+                .collection('promotions')
+                .where('isActive', isEqualTo: true)
+                .snapshots(),
+            builder: (context, snapshot) {
+              final active = snapshot.data?.docs ?? [];
+              if (active.isEmpty) return const SizedBox.shrink();
+              final promotion = active.first.data();
+              final code = (promotion['code'] ?? '').toString();
+              final description = (promotion['description'] ?? '').toString();
+              if (code.isEmpty) return const SizedBox.shrink();
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Container(
+                  constraints: const BoxConstraints(minHeight: 135),
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(22),
+                    image: const DecorationImage(
+                      image: AssetImage('assets/images/slide_3_bg.png'),
+                      fit: BoxFit.cover,
                     ),
-                    child: Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(6),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF818CF8).withValues(alpha: 0.15),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(Icons.workspace_premium_rounded,
-                              color: Color(0xFF818CF8), size: 18),
-                        ),
-                        const SizedBox(width: 10),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              context.tr('client_silver_pts'),
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.bold,
-                                color: titleColor,
-                              ),
-                            ),
-                            Text(
-                              context.tr('client_loyalty_sub'),
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: subColor,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                // 3 coupons DAR20
-                Expanded(
-                  flex: 2,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 12),
-                    decoration: BoxDecoration(
-                      color: isDark ? const Color(0xFF1E293B) : const Color(0xFFFDEEE7),
-                      borderRadius: BorderRadius.circular(16),
-                      border: isDark ? Border.all(color: const Color(0xFF334155)) : null,
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.confirmation_num_rounded,
-                          color: Color(0xFFDE6D1B),
-                          size: 20,
-                        ),
-                        const SizedBox(width: 8),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              context.tr('client_coupons_count'),
-                              style: TextStyle(
-                                fontSize: 12.5,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFFDE6D1B),
-                              ),
-                            ),
-                            Text(
-                              'DAR20',
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: subColor,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 18),
-
-          // 4. Promo Banner ("-20% sur tout ce weekend")
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Container(
-              height: 135,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(22),
-                image: const DecorationImage(
-                  image: AssetImage('assets/images/slide_3_bg.png'),
-                  fit: BoxFit.cover,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.08),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(22),
-                  gradient: LinearGradient(
-                    colors: [
-                      const Color(0xFF0D544E).withValues(alpha: 0.92),
-                      const Color(0xFF0D544E).withValues(alpha: 0.45),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.08),
+                        blurRadius: 12,
+                        offset: const Offset(0, 4),
+                      ),
                     ],
-                    begin: Alignment.centerLeft,
-                    end: Alignment.centerRight,
                   ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Row(
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(22),
+                      gradient: LinearGradient(
+                        colors: [
+                          const Color(0xFF0D544E).withValues(alpha: 0.92),
+                          const Color(0xFF0D544E).withValues(alpha: 0.45),
+                        ],
+                        begin: Alignment.centerLeft,
+                        end: Alignment.centerRight,
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Icon(Icons.celebration_rounded,
-                            color: Color(0xFFFFD166), size: 16),
-                        const SizedBox(width: 6),
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.celebration_rounded,
+                              color: Color(0xFFFFD166),
+                              size: 16,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              'client_limited_offer'.tr(),
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.9),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
                         Text(
-                          context.tr('client_limited_offer'),
+                          description,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.9),
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        ElevatedButton(
+                          onPressed: () async {
+                            await Clipboard.setData(ClipboardData(text: code));
+                            if (!context.mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  'home_promo_copied'.tr(
+                                    namedArgs: {'code': code},
+                                  ),
+                                ),
+                                backgroundColor: Color(0xFFDE6D1B),
+                              ),
+                            );
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFDE6D1B),
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 8,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                          ),
+                          child: Text(
+                            code,
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 6),
-                    Text(
-                      context.tr('client_promo_title'),
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    ElevatedButton(
-                      onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Code promo DAR20 appliqué (-20%) !'),
-                            backgroundColor: Color(0xFFDE6D1B),
-                          ),
-                        );
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFDE6D1B),
-                        foregroundColor: Colors.white,
-                        elevation: 0,
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 8),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                      ),
-                      child: Text(
-                        context.tr('client_claim_offer'),
-                        style: TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
-              ),
-            ),
+              );
+            },
           ),
 
           const SizedBox(height: 24),
@@ -919,7 +890,7 @@ class _HomeScreenState extends State<HomeScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  context.tr('categories'),
+                  'categories'.tr(),
                   style: TextStyle(
                     fontSize: 19,
                     fontWeight: FontWeight.bold,
@@ -936,7 +907,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     );
                   },
                   child: Text(
-                    context.tr('see_all'),
+                    'see_all'.tr(),
                     style: const TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.bold,
@@ -961,7 +932,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 crossAxisCount: 4,
                 mainAxisSpacing: 16,
                 crossAxisSpacing: 10,
-                childAspectRatio: 0.82,
+                mainAxisExtent: 104,
               ),
               itemBuilder: (context, index) {
                 final cat = _categories[index];
@@ -973,9 +944,13 @@ class _HomeScreenState extends State<HomeScreen> {
                         width: 58,
                         height: 58,
                         decoration: BoxDecoration(
-                          color: isDark ? const Color(0xFF1E293B) : (cat['bgColor'] as Color),
+                          color: isDark
+                              ? const Color(0xFF1E293B)
+                              : (cat['bgColor'] as Color),
                           borderRadius: BorderRadius.circular(20),
-                          border: isDark ? Border.all(color: const Color(0xFF334155)) : null,
+                          border: isDark
+                              ? Border.all(color: const Color(0xFF334155))
+                              : null,
                         ),
                         alignment: Alignment.center,
                         child: Icon(
@@ -992,7 +967,9 @@ class _HomeScreenState extends State<HomeScreen> {
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
-                          color: isDark ? Colors.white : const Color(0xFF2C3E50),
+                          color: isDark
+                              ? Colors.white
+                              : const Color(0xFF2C3E50),
                         ),
                       ),
                     ],
@@ -1011,7 +988,7 @@ class _HomeScreenState extends State<HomeScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  context.tr('recommended_pros'),
+                  'recommended_pros'.tr(),
                   style: TextStyle(
                     fontSize: 19,
                     fontWeight: FontWeight.bold,
@@ -1028,7 +1005,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     );
                   },
                   child: Text(
-                    context.tr('see_all'),
+                    'see_all'.tr(),
                     style: const TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.bold,
@@ -1049,11 +1026,13 @@ class _HomeScreenState extends State<HomeScreen> {
               stream: FirebaseService().streamPros(sortBy: 'rating'),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator(color: Color(0xFF0D544E)));
+                  return const Center(
+                    child: CircularProgressIndicator(color: Color(0xFF0D544E)),
+                  );
                 }
                 final pros = snapshot.data ?? [];
                 if (pros.isEmpty) {
-                  return Center(child: Text(context.tr('client_no_pro_available')));
+                  return Center(child: Text('client_no_pro_available'.tr()));
                 }
                 return ListView.builder(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -1071,10 +1050,14 @@ class _HomeScreenState extends State<HomeScreen> {
                         decoration: BoxDecoration(
                           color: cardColor,
                           borderRadius: BorderRadius.circular(20),
-                          border: isDark ? Border.all(color: const Color(0xFF334155)) : null,
+                          border: isDark
+                              ? Border.all(color: const Color(0xFF334155))
+                              : null,
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
+                              color: Colors.black.withValues(
+                                alpha: isDark ? 0.2 : 0.04,
+                              ),
                               blurRadius: 10,
                               offset: const Offset(0, 4),
                             ),
@@ -1084,45 +1067,68 @@ class _HomeScreenState extends State<HomeScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             // Pro Photo with "• Disponible" pill
-                            Stack(
-                              children: [
-                                ClipRRect(
-                                  borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-                                  child: ProAvatarWidget(
-                                    name: pro['name'] as String? ?? '',
-                                    photoBase64: pro['photoBase64'] as String? ?? '',
-                                    size: 105,
-                                    borderRadius: 0,
-                                    showVerifiedBadge: false,
-                                  ),
-                                ),
-                                Positioned(
-                                  top: 8,
-                                  right: 8,
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                    decoration: BoxDecoration(
-                                      color: isAvailable ? const Color(0xFF10B981) : Colors.grey,
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: Text(
-                                      isAvailable ? '• ${context.tr('available')}' : '• ${context.tr('unavailable')}',
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.bold,
+                            SizedBox(
+                              width: double.infinity,
+                              height: 105,
+                              child: Stack(
+                                children: [
+                                  Positioned.fill(
+                                    child: ClipRRect(
+                                      borderRadius: const BorderRadius.vertical(
+                                        top: Radius.circular(20),
+                                      ),
+                                      child: ProAvatarWidget(
+                                        name: pro['name'] as String? ?? '',
+                                        photoBase64:
+                                            pro['photoBase64'] as String? ?? '',
+                                        photoUrl:
+                                            pro['photoUrl'] as String? ?? '',
+                                        avatarAsset:
+                                            pro['avatarAsset'] as String? ?? '',
+                                        size: 175,
+                                        borderRadius: 0,
+                                        showVerifiedBadge: false,
+                                        fill: true,
                                       ),
                                     ),
                                   ),
-                                ),
-                                Positioned(
-                                  top: 8,
-                                  left: 8,
-                                  child: GestureDetector(
-                                    onTap: () async {
-                                      final proId = (pro['id'] ?? pro['uid'] ?? '').toString();
-                                      final isNowFav = await FirebaseService().toggleFavorite(pro);
-                                      if (mounted) {
+                                  Positioned(
+                                    top: 8,
+                                    right: 8,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 3,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: isAvailable
+                                            ? const Color(0xFF10B981)
+                                            : Colors.grey,
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Text(
+                                        isAvailable
+                                            ? '• ${'available'.tr()}'
+                                            : '• ${'unavailable'.tr()}',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  Positioned(
+                                    top: 8,
+                                    left: 8,
+                                    child: GestureDetector(
+                                      onTap: () async {
+                                        final proId =
+                                            (pro['id'] ?? pro['uid'] ?? '')
+                                                .toString();
+                                        final isNowFav = await FirebaseService()
+                                            .toggleFavorite(pro);
+                                        if (!context.mounted) return;
                                         setState(() {
                                           if (isNowFav) {
                                             _favIds.add(proId);
@@ -1130,36 +1136,53 @@ class _HomeScreenState extends State<HomeScreen> {
                                             _favIds.remove(proId);
                                           }
                                         });
-                                        ScaffoldMessenger.of(context).showSnackBar(
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
                                           SnackBar(
-                                            content: Text(isNowFav
-                                                ? '${pro['name']} ajouté aux favoris !'
-                                                : '${pro['name']} retiré des favoris.'),
-                                            backgroundColor: isNowFav ? const Color(0xFF10B981) : Colors.grey.shade700,
-                                            duration: const Duration(seconds: 1),
+                                            content: Text(
+                                              isNowFav
+                                                  ? '${pro['name']} ajouté aux favoris !'
+                                                  : '${pro['name']} retiré des favoris.',
+                                            ),
+                                            backgroundColor: isNowFav
+                                                ? const Color(0xFF10B981)
+                                                : Colors.grey.shade700,
+                                            duration: const Duration(
+                                              seconds: 1,
+                                            ),
                                           ),
                                         );
-                                      }
-                                    },
-                                    child: Container(
-                                      padding: const EdgeInsets.all(5),
-                                      decoration: BoxDecoration(
-                                        color: Colors.black.withValues(alpha: 0.4),
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: Icon(
-                                        _favIds.contains((pro['id'] ?? pro['uid'] ?? '').toString())
-                                            ? Icons.favorite_rounded
-                                            : Icons.favorite_border_rounded,
-                                        color: _favIds.contains((pro['id'] ?? pro['uid'] ?? '').toString())
-                                            ? const Color(0xFFEF4444)
-                                            : Colors.white,
-                                        size: 16,
+                                      },
+                                      child: Container(
+                                        padding: const EdgeInsets.all(5),
+                                        decoration: BoxDecoration(
+                                          color: Colors.black.withValues(
+                                            alpha: 0.4,
+                                          ),
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: Icon(
+                                          _favIds.contains(
+                                                (pro['id'] ?? pro['uid'] ?? '')
+                                                    .toString(),
+                                              )
+                                              ? Icons.favorite_rounded
+                                              : Icons.favorite_border_rounded,
+                                          color:
+                                              _favIds.contains(
+                                                (pro['id'] ?? pro['uid'] ?? '')
+                                                    .toString(),
+                                              )
+                                              ? const Color(0xFFEF4444)
+                                              : Colors.white,
+                                          size: 16,
+                                        ),
                                       ),
                                     ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
                             Padding(
                               padding: const EdgeInsets.all(10),
@@ -1177,21 +1200,36 @@ class _HomeScreenState extends State<HomeScreen> {
                                     ),
                                   ),
                                   const SizedBox(height: 2),
-                                  Text(
-                                    pro['serviceType'] ?? pro['service'] ?? '',
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      color: Color(0xFF0D544E),
-                                      fontWeight: FontWeight.w600,
-                                    ),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          pro['serviceType'] ??
+                                              pro['service'] ??
+                                              '',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                            fontSize: 12,
+                                            color: Color(0xFF0D544E),
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                   const SizedBox(height: 8),
                                   Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
                                     children: [
                                       Row(
                                         children: [
-                                          const Icon(Icons.star_rounded, color: Color(0xFFF39C12), size: 15),
+                                          const Icon(
+                                            Icons.star_rounded,
+                                            color: Color(0xFFF39C12),
+                                            size: 15,
+                                          ),
                                           const SizedBox(width: 2),
                                           Text(
                                             '${pro['rating'] ?? 4.8}',
@@ -1232,7 +1270,7 @@ class _HomeScreenState extends State<HomeScreen> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Text(
-              context.tr('client_near_you'),
+              'client_near_you'.tr(),
               style: TextStyle(
                 fontSize: 19,
                 fontWeight: FontWeight.bold,
@@ -1253,7 +1291,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   return const Center(
                     child: Padding(
                       padding: EdgeInsets.all(20),
-                      child: CircularProgressIndicator(color: Color(0xFF0D544E)),
+                      child: CircularProgressIndicator(
+                        color: Color(0xFF0D544E),
+                      ),
                     ),
                   );
                 }
@@ -1263,7 +1303,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: Padding(
                       padding: const EdgeInsets.all(20),
                       child: Text(
-                        context.tr('client_no_pro_found'),
+                        'client_no_pro_found'.tr(),
                         style: TextStyle(color: Colors.grey.shade600),
                       ),
                     ),
@@ -1272,10 +1312,16 @@ class _HomeScreenState extends State<HomeScreen> {
 
                 return Column(
                   children: pros.map((pro) {
-                    final ratingVal = pro['rating'] != null ? pro['rating'].toString() : '4.8';
-                    final priceVal = pro['price'] != null ? pro['price'].toString() : 'Sur devis';
-                    final isAvail = pro['isAvailable'] == true || pro['available'] == true;
-                    final reviewsCount = pro['reviewsCount'] ?? pro['reviews'] ?? '24';
+                    final ratingVal = pro['rating'] != null
+                        ? pro['rating'].toString()
+                        : '4.8';
+                    final priceVal = pro['price'] != null
+                        ? pro['price'].toString()
+                        : 'Sur devis';
+                    final isAvail =
+                        pro['isAvailable'] == true || pro['available'] == true;
+                    final reviewsCount =
+                        pro['reviewsCount'] ?? pro['reviews'] ?? '24';
 
                     return Container(
                       margin: const EdgeInsets.only(bottom: 12),
@@ -1283,10 +1329,14 @@ class _HomeScreenState extends State<HomeScreen> {
                       decoration: BoxDecoration(
                         color: cardColor,
                         borderRadius: BorderRadius.circular(20),
-                        border: isDark ? Border.all(color: const Color(0xFF334155)) : null,
+                        border: isDark
+                            ? Border.all(color: const Color(0xFF334155))
+                            : null,
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
+                            color: Colors.black.withValues(
+                              alpha: isDark ? 0.2 : 0.03,
+                            ),
                             blurRadius: 8,
                             offset: const Offset(0, 3),
                           ),
@@ -1301,9 +1351,11 @@ class _HomeScreenState extends State<HomeScreen> {
                             ProAvatarWidget(
                               name: pro['name'] as String? ?? '',
                               photoBase64: pro['photoBase64'] as String? ?? '',
+                              photoUrl: pro['photoUrl'] as String? ?? '',
+                              avatarAsset: pro['avatarAsset'] as String? ?? '',
                               size: 58,
                               borderRadius: 16,
-                              showVerifiedBadge: true,
+                              showVerifiedBadge: pro['demoProfile'] != true,
                             ),
                             const SizedBox(width: 14),
                             // Details
@@ -1320,18 +1372,31 @@ class _HomeScreenState extends State<HomeScreen> {
                                     ),
                                   ),
                                   const SizedBox(height: 2),
-                                  Text(
-                                    pro['city'] ?? pro['distance'] ?? 'Tunis, Tunisie',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: subColor,
-                                    ),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          pro['city'] ??
+                                              pro['distance'] ??
+                                              'Tunis, Tunisie',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: subColor,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                   const SizedBox(height: 4),
                                   Row(
                                     children: [
-                                      const Icon(Icons.star_rounded,
-                                          color: Color(0xFFF39C12), size: 15),
+                                      const Icon(
+                                        Icons.star_rounded,
+                                        color: Color(0xFFF39C12),
+                                        size: 15,
+                                      ),
                                       const SizedBox(width: 3),
                                       Text(
                                         '$ratingVal ($reviewsCount)',
@@ -1361,10 +1426,13 @@ class _HomeScreenState extends State<HomeScreen> {
                                 const SizedBox(height: 6),
                                 Container(
                                   padding: const EdgeInsets.symmetric(
-                                      horizontal: 8, vertical: 3),
+                                    horizontal: 8,
+                                    vertical: 3,
+                                  ),
                                   decoration: BoxDecoration(
                                     color: isAvail
-                                        ? const Color(0xFF10B981).withValues(alpha: 0.12)
+                                        ? const Color(0xFF10B981)
+                                              .withValues(alpha: 0.12)
                                         : Colors.grey.withValues(alpha: 0.15),
                                     borderRadius: BorderRadius.circular(10),
                                   ),
@@ -1400,9 +1468,13 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildFavoritesScreenPlaceholder(double topPadding) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cardColor = isDark ? const Color(0xFF1E293B) : Colors.white;
-    final borderColor = isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
+    final borderColor = isDark
+        ? const Color(0xFF334155)
+        : const Color(0xFFE2E8F0);
     final textPrimary = isDark ? Colors.white : const Color(0xFF0F172A);
-    final textSecondary = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+    final textSecondary = isDark
+        ? const Color(0xFF94A3B8)
+        : const Color(0xFF64748B);
 
     return SafeArea(
       child: StreamBuilder<List<Map<String, dynamic>>>(
@@ -1410,8 +1482,11 @@ class _HomeScreenState extends State<HomeScreen> {
         builder: (context, snapshot) {
           final favs = snapshot.data ?? [];
 
-          if (snapshot.connectionState == ConnectionState.waiting && favs.isEmpty) {
-            return const Center(child: CircularProgressIndicator(color: Color(0xFF0D544E)));
+          if (snapshot.connectionState == ConnectionState.waiting &&
+              favs.isEmpty) {
+            return const Center(
+              child: CircularProgressIndicator(color: Color(0xFF0D544E)),
+            );
           }
 
           if (favs.isEmpty) {
@@ -1427,11 +1502,15 @@ class _HomeScreenState extends State<HomeScreen> {
                         color: const Color(0xFFEF4444).withValues(alpha: 0.1),
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.favorite_border_rounded, size: 56, color: Color(0xFFEF4444)),
+                      child: const Icon(
+                        Icons.favorite_border_rounded,
+                        size: 56,
+                        color: Color(0xFFEF4444),
+                      ),
                     ),
                     const SizedBox(height: 18),
                     Text(
-                      'Aucun artisan favori pour le moment',
+                      'favorites_empty_title'.tr(),
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 18,
@@ -1441,9 +1520,13 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Ajoutez des artisans à vos favoris en cliquant sur l\'icône cœur pour les retrouver rapidement ici.',
+                      'favorites_empty_body'.tr(),
                       textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 13.5, color: textSecondary, height: 1.4),
+                      style: TextStyle(
+                        fontSize: 13.5,
+                        color: textSecondary,
+                        height: 1.4,
+                      ),
                     ),
                     const SizedBox(height: 24),
                     ElevatedButton.icon(
@@ -1451,13 +1534,21 @@ class _HomeScreenState extends State<HomeScreen> {
                         setState(() => _currentBottomNavIndex = 0);
                       },
                       icon: const Icon(Icons.search_rounded, size: 18),
-                      label: const Text('Découvrir les artisans', style: TextStyle(fontWeight: FontWeight.bold)),
+                      label: Text(
+                        'favorites_discover'.tr(),
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF0D544E),
                         foregroundColor: Colors.white,
                         elevation: 0,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                        padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 22,
+                          vertical: 12,
+                        ),
                       ),
                     ),
                   ],
@@ -1474,7 +1565,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 Row(
                   children: [
                     Text(
-                      'Mes Favoris',
+                      'favorites_title'.tr(),
                       style: TextStyle(
                         fontSize: 22,
                         fontWeight: FontWeight.bold,
@@ -1484,7 +1575,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     const SizedBox(width: 10),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
                         color: const Color(0xFF0D544E).withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(16),
@@ -1507,10 +1601,13 @@ class _HomeScreenState extends State<HomeScreen> {
                     separatorBuilder: (_, _) => const SizedBox(height: 12),
                     itemBuilder: (context, index) {
                       final pro = favs[index];
-                      final proName = pro['name'] ?? pro['fullName'] ?? 'Artisan';
+                      final proName =
+                          pro['name'] ?? pro['fullName'] ?? 'Artisan';
                       final service = pro['serviceType'] ?? 'Service';
                       final price = pro['price'] ?? '35 DT/h';
-                      final rating = (pro['rating'] is num) ? (pro['rating'] as num).toDouble() : 4.8;
+                      final rating = (pro['rating'] is num)
+                          ? (pro['rating'] as num).toDouble()
+                          : 4.8;
 
                       return Container(
                         padding: const EdgeInsets.all(14),
@@ -1520,7 +1617,9 @@ class _HomeScreenState extends State<HomeScreen> {
                           border: Border.all(color: borderColor),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.02),
+                              color: Colors.black.withValues(
+                                alpha: isDark ? 0.2 : 0.02,
+                              ),
                               blurRadius: 8,
                               offset: const Offset(0, 2),
                             ),
@@ -1531,9 +1630,11 @@ class _HomeScreenState extends State<HomeScreen> {
                             ProAvatarWidget(
                               name: pro['name'] as String? ?? '',
                               photoBase64: pro['photoBase64'] as String? ?? '',
+                              photoUrl: pro['photoUrl'] as String? ?? '',
+                              avatarAsset: pro['avatarAsset'] as String? ?? '',
                               size: 62,
                               borderRadius: 14,
-                              showVerifiedBadge: true,
+                              showVerifiedBadge: pro['demoProfile'] != true,
                             ),
                             const SizedBox(width: 14),
                             Expanded(
@@ -1549,18 +1650,37 @@ class _HomeScreenState extends State<HomeScreen> {
                                     ),
                                   ),
                                   const SizedBox(height: 3),
-                                  Text(
-                                    service,
-                                    style: TextStyle(fontSize: 12.5, color: textSecondary),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          service,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            fontSize: 12.5,
+                                            color: textSecondary,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                   const SizedBox(height: 6),
                                   Row(
                                     children: [
-                                      const Icon(Icons.star_rounded, size: 16, color: Color(0xFFF59E0B)),
+                                      const Icon(
+                                        Icons.star_rounded,
+                                        size: 16,
+                                        color: Color(0xFFF59E0B),
+                                      ),
                                       const SizedBox(width: 4),
                                       Text(
                                         rating.toStringAsFixed(1),
-                                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: textPrimary),
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.bold,
+                                          color: textPrimary,
+                                        ),
                                       ),
                                       const SizedBox(width: 12),
                                       Text(
@@ -1579,7 +1699,11 @@ class _HomeScreenState extends State<HomeScreen> {
                             Column(
                               children: [
                                 IconButton(
-                                  icon: const Icon(Icons.favorite_rounded, color: Color(0xFFEF4444), size: 22),
+                                  icon: const Icon(
+                                    Icons.favorite_rounded,
+                                    color: Color(0xFFEF4444),
+                                    size: 22,
+                                  ),
                                   tooltip: 'Retirer des favoris',
                                   onPressed: () async {
                                     await FirebaseService().toggleFavorite(pro);
@@ -1592,11 +1716,22 @@ class _HomeScreenState extends State<HomeScreen> {
                                     backgroundColor: const Color(0xFF0D544E),
                                     foregroundColor: Colors.white,
                                     elevation: 0,
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 6,
+                                    ),
                                     minimumSize: Size.zero,
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
                                   ),
-                                  child: const Text('Réserver', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                                  child: Text(
+                                    'book_now'.tr(),
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
                                 ),
                               ],
                             ),
@@ -1655,8 +1790,13 @@ class _HomeScreenState extends State<HomeScreen> {
                   borderRadius: BorderRadius.circular(25),
                 ),
                 labelColor: Colors.white,
-                unselectedLabelColor: isDark ? Colors.grey.shade400 : Colors.grey.shade700,
-                labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                unselectedLabelColor: isDark
+                    ? Colors.grey.shade400
+                    : Colors.grey.shade700,
+                labelStyle: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                ),
                 tabs: [
                   Tab(text: loc.translate('tab_all')),
                   Tab(text: loc.translate('tab_pending')),
@@ -1703,10 +1843,16 @@ class _HomeScreenState extends State<HomeScreen> {
                 Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
-                    color: isDark ? const Color(0xFF1E293B) : const Color(0xFFD7F3EA).withValues(alpha: 0.5),
+                    color: isDark
+                        ? const Color(0xFF1E293B)
+                        : const Color(0xFFD7F3EA).withValues(alpha: 0.5),
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(Icons.calendar_today_rounded, size: 48, color: Color(0xFF0D544E)),
+                  child: const Icon(
+                    Icons.calendar_today_rounded,
+                    size: 48,
+                    color: Color(0xFF0D544E),
+                  ),
                 ),
                 const SizedBox(height: 16),
                 Text(
@@ -1719,8 +1865,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Statut : $filter',
-                  style: TextStyle(fontSize: 13, color: isDark ? Colors.grey.shade400 : Colors.grey.shade600),
+                  'home_status_label'.tr(namedArgs: {'status': filter}),
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                  ),
                 ),
               ],
             ),
@@ -1778,12 +1927,17 @@ class _HomeScreenState extends State<HomeScreen> {
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
-                              color: isDark ? Colors.white : AppTheme.titleColor,
+                              color: isDark
+                                  ? Colors.white
+                                  : AppTheme.titleColor,
                             ),
                           ),
                         ),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
                           decoration: BoxDecoration(
                             color: statusBg,
                             borderRadius: BorderRadius.circular(20),
@@ -1802,13 +1956,19 @@ class _HomeScreenState extends State<HomeScreen> {
                     const SizedBox(height: 8),
                     Row(
                       children: [
-                        const Icon(Icons.person_outline_rounded, size: 16, color: Color(0xFF0D544E)),
+                        const Icon(
+                          Icons.person_outline_rounded,
+                          size: 16,
+                          color: Color(0xFF0D544E),
+                        ),
                         const SizedBox(width: 6),
                         Text(
                           b['proName'] ?? 'Professionnel',
                           style: TextStyle(
                             fontSize: 13,
-                            color: isDark ? Colors.grey.shade300 : AppTheme.subtitleColor,
+                            color: isDark
+                                ? Colors.grey.shade300
+                                : AppTheme.subtitleColor,
                           ),
                         ),
                         const Spacer(),
@@ -1822,16 +1982,24 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ],
                     ),
-                    if (b['address'] != null && b['address'].toString().isNotEmpty) ...[
+                    if (b['address'] != null &&
+                        b['address'].toString().isNotEmpty) ...[
                       const SizedBox(height: 6),
                       Row(
                         children: [
-                          Icon(Icons.location_on_outlined, size: 16, color: Colors.grey.shade500),
+                          Icon(
+                            Icons.location_on_outlined,
+                            size: 16,
+                            color: Colors.grey.shade500,
+                          ),
                           const SizedBox(width: 6),
                           Expanded(
                             child: Text(
                               b['address'].toString(),
-                              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey.shade600,
+                              ),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -1843,11 +2011,18 @@ class _HomeScreenState extends State<HomeScreen> {
                       const SizedBox(height: 6),
                       Row(
                         children: [
-                          Icon(Icons.event_outlined, size: 16, color: Colors.grey.shade500),
+                          Icon(
+                            Icons.event_outlined,
+                            size: 16,
+                            color: Colors.grey.shade500,
+                          ),
                           const SizedBox(width: 6),
                           Text(
                             b['scheduledDate'].toString(),
-                            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey.shade600,
+                            ),
                           ),
                         ],
                       ),
@@ -1860,20 +2035,59 @@ class _HomeScreenState extends State<HomeScreen> {
                           onPressed: () async {
                             final bookingId = b['id']?.toString() ?? '';
                             if (bookingId.isEmpty) return;
-                            final ok = await FirebaseService().cancelBooking(bookingId);
+                            final confirmed = await showDialog<bool>(
+                              context: context,
+                              builder: (dialogContext) => AlertDialog(
+                                title: Text('booking_cancel_confirm'.tr()),
+                                content: Text('booking_cancel_warning'.tr()),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () =>
+                                        Navigator.of(dialogContext).pop(false),
+                                    child: Text('cancel'.tr()),
+                                  ),
+                                  FilledButton(
+                                    style: FilledButton.styleFrom(
+                                      backgroundColor: const Color(0xFFDC2626),
+                                      foregroundColor: Colors.white,
+                                    ),
+                                    onPressed: () =>
+                                        Navigator.of(dialogContext).pop(true),
+                                    child: Text('confirm'.tr()),
+                                  ),
+                                ],
+                              ),
+                            );
+                            if (confirmed != true || !context.mounted) return;
+                            final ok = await FirebaseService().cancelBooking(
+                              bookingId,
+                            );
                             if (context.mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
-                                  content: Text(ok ? 'Réservation annulée' : 'Impossible d\'annuler'),
-                                  backgroundColor: ok ? const Color(0xFFEF4444) : Colors.grey,
+                                  content: Text(
+                                    ok
+                                        ? 'Réservation annulée'
+                                        : 'Impossible d\'annuler',
+                                  ),
+                                  backgroundColor: ok
+                                      ? const Color(0xFFEF4444)
+                                      : Colors.grey,
                                 ),
                               );
                             }
                           },
-                          icon: const Icon(Icons.cancel_outlined, size: 16, color: Color(0xFFEF4444)),
-                          label: const Text(
-                            'Annuler la demande',
-                            style: TextStyle(color: Color(0xFFEF4444), fontSize: 12),
+                          icon: const Icon(
+                            Icons.cancel_outlined,
+                            size: 16,
+                            color: Color(0xFFEF4444),
+                          ),
+                          label: Text(
+                            'cancel_service_request'.tr(),
+                            style: TextStyle(
+                              color: Color(0xFFEF4444),
+                              fontSize: 12,
+                            ),
                           ),
                         ),
                       ),
@@ -1894,7 +2108,11 @@ class _HomeScreenState extends State<HomeScreen> {
     return Container(
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF1E293B) : Colors.white,
-        border: isDark ? const Border(top: BorderSide(color: Color(0xFF334155), width: 0.8)) : null,
+        border: isDark
+            ? const Border(
+                top: BorderSide(color: Color(0xFF334155), width: 0.8),
+              )
+            : null,
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.05),
@@ -1909,41 +2127,62 @@ class _HomeScreenState extends State<HomeScreen> {
           setState(() {
             _currentBottomNavIndex = index;
           });
+          // Rafraîchit la photo de profil quand on revient à l'accueil
+          if (index == 0) _loadProfilePhoto();
         },
         type: BottomNavigationBarType.fixed,
         backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
-        selectedItemColor: isDark ? const Color(0xFF14B8A6) : const Color(0xFF0D544E),
+        selectedItemColor: isDark
+            ? const Color(0xFF14B8A6)
+            : const Color(0xFF0D544E),
         unselectedItemColor: const Color(0xFF94A3B8),
         selectedLabelStyle: const TextStyle(
           fontSize: 11,
           fontWeight: FontWeight.bold,
         ),
-        unselectedLabelStyle: const TextStyle(
-          fontSize: 11,
-        ),
+        unselectedLabelStyle: const TextStyle(fontSize: 11),
         items: [
           BottomNavigationBarItem(
             icon: const Icon(Icons.home_outlined),
             activeIcon: const Icon(Icons.home_rounded),
-            label: context.tr('home'),
+            label: 'home'.tr(),
           ),
           BottomNavigationBarItem(
             icon: const Icon(Icons.search_rounded),
-            label: context.tr('search'),
+            label: 'search'.tr(),
           ),
           BottomNavigationBarItem(
             icon: const Icon(Icons.favorite_border_rounded),
             activeIcon: const Icon(Icons.favorite_rounded),
-            label: context.tr('favorites'),
+            label: 'favorites'.tr(),
+          ),
+          BottomNavigationBarItem(
+            icon: Badge(
+              isLabelVisible: _unreadMessages > 0,
+              label: Text(
+                _unreadMessages > 9 ? '9+' : '$_unreadMessages',
+                style: const TextStyle(fontSize: 9, color: Colors.white),
+              ),
+              child: const Icon(Icons.chat_bubble_outline_rounded),
+            ),
+            activeIcon: Badge(
+              isLabelVisible: _unreadMessages > 0,
+              label: Text(
+                _unreadMessages > 9 ? '9+' : '$_unreadMessages',
+                style: const TextStyle(fontSize: 9, color: Colors.white),
+              ),
+              child: const Icon(Icons.chat_bubble_rounded),
+            ),
+            label: 'messages_inbox'.tr(),
           ),
           BottomNavigationBarItem(
             icon: const Icon(Icons.access_time_rounded),
-            label: context.tr('bookings'),
+            label: 'nav_bookings'.tr(),
           ),
           BottomNavigationBarItem(
             icon: const Icon(Icons.person_outline_rounded),
             activeIcon: const Icon(Icons.person_rounded),
-            label: context.tr('profile'),
+            label: 'profile'.tr(),
           ),
         ],
       ),
@@ -1954,30 +2193,38 @@ class _HomeScreenState extends State<HomeScreen> {
 // ── Notifications Sheet ───────────────────────────────────────────────────────
 class _NotificationsSheet extends StatelessWidget {
   final bool isDark;
-  const _NotificationsSheet({required this.isDark});
+  final String clientName;
+  const _NotificationsSheet({required this.isDark, required this.clientName});
 
   Color _notifColor(String? type) {
     switch (type) {
-      case 'booking_status_update': return const Color(0xFF0D544E);
-      case 'new_booking':           return const Color(0xFFDE6D1B);
-      default:                      return const Color(0xFF64748B);
+      case 'booking_status_update':
+        return const Color(0xFF0D544E);
+      case 'new_booking':
+        return const Color(0xFFDE6D1B);
+      default:
+        return const Color(0xFF64748B);
     }
   }
 
   IconData _notifIcon(String? newStatus) {
     switch (newStatus) {
-      case 'confirmee': return Icons.check_circle_rounded;
-      case 'annulee':   return Icons.cancel_rounded;
-      case 'terminee':  return Icons.flag_rounded;
-      default:          return Icons.notifications_rounded;
+      case 'confirmee':
+        return Icons.check_circle_rounded;
+      case 'annulee':
+        return Icons.cancel_rounded;
+      case 'terminee':
+        return Icons.flag_rounded;
+      default:
+        return Icons.notifications_rounded;
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final cardBg  = isDark ? const Color(0xFF1E293B) : Colors.white;
+    final cardBg = isDark ? const Color(0xFF1E293B) : Colors.white;
     final titleColor = isDark ? Colors.white : const Color(0xFF0F172A);
-    final subColor   = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+    final subColor = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
 
     return DraggableScrollableSheet(
       expand: false,
@@ -1998,9 +2245,12 @@ class _NotificationsSheet extends StatelessWidget {
                 children: [
                   Center(
                     child: Container(
-                      width: 40, height: 4,
+                      width: 40,
+                      height: 4,
                       decoration: BoxDecoration(
-                        color: isDark ? const Color(0xFF334155) : Colors.grey.shade300,
+                        color: isDark
+                            ? const Color(0xFF334155)
+                            : Colors.grey.shade300,
                         borderRadius: BorderRadius.circular(2),
                       ),
                     ),
@@ -2010,24 +2260,36 @@ class _NotificationsSheet extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        context.tr('notifications'),
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: titleColor),
+                        'notifications'.tr(),
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: titleColor,
+                        ),
                       ),
                       StreamBuilder<List<Map<String, dynamic>>>(
                         stream: FirebaseService().streamClientNotifications(),
                         builder: (_, snap) {
-                          final unread = (snap.data ?? []).where((n) => n['isRead'] != true).length;
+                          final unread = (snap.data ?? [])
+                              .where((n) => n['isRead'] != true)
+                              .length;
                           if (unread == 0) return const SizedBox.shrink();
                           return TextButton(
                             onPressed: () async {
                               final uid = (snap.data?.isNotEmpty == true)
                                   ? snap.data!.first['recipientId'] as String?
                                   : null;
-                              if (uid != null) await FirebaseService().markAllNotificationsRead(uid);
+                              if (uid != null) {
+                                await FirebaseService()
+                                    .markAllNotificationsRead(uid);
+                              }
                             },
                             child: Text(
-                              context.tr('mark_all_read'),
-                              style: const TextStyle(color: Color(0xFF0D544E), fontSize: 12),
+                              'mark_all_read'.tr(),
+                              style: const TextStyle(
+                                color: Color(0xFF0D544E),
+                                fontSize: 12,
+                              ),
                             ),
                           );
                         },
@@ -2045,40 +2307,156 @@ class _NotificationsSheet extends StatelessWidget {
                 stream: FirebaseService().streamClientNotifications(),
                 builder: (context, snap) {
                   if (snap.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator(color: Color(0xFF0D544E)));
+                    return const Center(
+                      child: CircularProgressIndicator(
+                        color: Color(0xFF0D544E),
+                      ),
+                    );
                   }
                   final notifs = snap.data ?? [];
                   if (notifs.isEmpty) {
                     return Center(
-                      child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                        Icon(Icons.notifications_none_rounded, size: 52, color: Colors.grey.shade400),
-                        const SizedBox(height: 12),
-                        Text(context.tr('no_notifications'),
-                            style: TextStyle(fontSize: 14, color: subColor)),
-                      ]),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.notifications_none_rounded,
+                            size: 52,
+                            color: Colors.grey.shade400,
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            'no_notifications'.tr(),
+                            style: TextStyle(fontSize: 14, color: subColor),
+                          ),
+                        ],
+                      ),
                     );
                   }
                   return ListView.separated(
                     controller: scrollCtrl,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 10,
+                    ),
                     itemCount: notifs.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 8),
+                    separatorBuilder: (_, _) => const SizedBox(height: 8),
                     itemBuilder: (_, i) {
                       final n = notifs[i];
                       final isUnread = n['isRead'] != true;
                       final type = n['type'] as String?;
                       final newStatus = n['newStatus'] as String?;
                       final color = _notifColor(type);
-                      final icon  = _notifIcon(newStatus);
+                      final icon = _notifIcon(newStatus);
                       final title = n['title'] as String? ?? '';
-                      final body  = n['body']  as String? ?? '';
-                      final time  = n['timeLabel'] as String? ?? '';
-                      final nid   = n['id'] as String? ?? '';
+                      final body = n['body'] as String? ?? '';
+                      final time = n['timeLabel'] as String? ?? '';
+                      final nid = n['id'] as String? ?? '';
 
                       return GestureDetector(
                         onTap: () async {
+                          final navigator = Navigator.of(context);
                           if (isUnread && nid.isNotEmpty) {
                             await FirebaseService().markNotificationRead(nid);
+                          }
+                          if (!navigator.mounted) return;
+
+                          if (type == 'booking_status_update' &&
+                              newStatus == 'terminee' &&
+                              n['bookingId'] != null) {
+                            navigator.pop();
+                            navigator.push(
+                              MaterialPageRoute(
+                                builder: (_) => BookingDetailScreen(
+                                  booking: {
+                                    'id': n['bookingId'].toString(),
+                                    'clientId': n['recipientId'],
+                                    'proId': n['proId'],
+                                    'proName':
+                                        n['proName'] as String? ?? 'Artisan',
+                                    'serviceType':
+                                        n['serviceType'] as String? ??
+                                        'Service',
+                                    'address': n['address'] as String? ?? '',
+                                    'scheduledDate':
+                                        n['scheduledDate'] as String? ?? '',
+                                    'price': n['baseAmount']?.toString() ?? '',
+                                    'status': 'terminee',
+                                    'clientReviewSubmitted': false,
+                                  },
+                                ),
+                              ),
+                            );
+                            return;
+                          }
+
+                          if (type == 'booking_status_update' &&
+                              newStatus == 'confirmee' &&
+                              n['bookingId'] != null) {
+                            final chatBooking = <String, dynamic>{
+                              'id': n['bookingId'].toString(),
+                              'clientName': clientName,
+                              'proId': n['proId'],
+                              'proName': n['proName'] as String? ?? 'Artisan',
+                              'serviceType':
+                                  n['serviceType'] as String? ?? 'Service',
+                              'status': 'confirmee',
+                            };
+                            navigator.pop();
+                            final action = await showDialog<bool>(
+                              context: navigator.context,
+                              builder: (dialogContext) => AlertDialog(
+                                title: Text('booking_chat_title'.tr()),
+                                content: Text('booking_accepted_choice'.tr()),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () =>
+                                        Navigator.pop(dialogContext),
+                                    child: Text('cancel'.tr()),
+                                  ),
+                                  TextButton.icon(
+                                    onPressed: () =>
+                                        Navigator.pop(dialogContext, true),
+                                    icon: const Icon(
+                                      Icons.chat_bubble_outline_rounded,
+                                    ),
+                                    label: Text('booking_chat_action'.tr()),
+                                  ),
+                                  FilledButton(
+                                    onPressed: () =>
+                                        Navigator.pop(dialogContext, false),
+                                    child: Text('booking_payment_action'.tr()),
+                                  ),
+                                ],
+                              ),
+                            );
+                            if (action == null) return;
+                            if (action) {
+                              navigator.push(
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      BookingChatScreen(booking: chatBooking),
+                                ),
+                              );
+                            } else {
+                              navigator.pushNamed(
+                                AppRoutes.checkout,
+                                arguments: {
+                                  'bookingId': n['bookingId'].toString(),
+                                  'proId': n['proId'] as String? ?? '',
+                                  'proName':
+                                      n['proName'] as String? ?? 'Artisan',
+                                  'serviceType':
+                                      n['serviceType'] as String? ?? 'Service',
+                                  'baseAmount':
+                                      (n['baseAmount'] as num?)?.toDouble() ??
+                                      45.0,
+                                  'address': n['address'] as String? ?? 'Tunis',
+                                  'scheduledDate':
+                                      n['scheduledDate'] as String?,
+                                },
+                              );
+                            }
                           }
                         },
                         child: AnimatedContainer(
@@ -2087,12 +2465,16 @@ class _NotificationsSheet extends StatelessWidget {
                           decoration: BoxDecoration(
                             color: isUnread
                                 ? color.withValues(alpha: 0.07)
-                                : (isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC)),
+                                : (isDark
+                                      ? const Color(0xFF0F172A)
+                                      : const Color(0xFFF8FAFC)),
                             borderRadius: BorderRadius.circular(14),
                             border: Border.all(
                               color: isUnread
                                   ? color.withValues(alpha: 0.25)
-                                  : (isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
+                                  : (isDark
+                                        ? const Color(0xFF334155)
+                                        : const Color(0xFFE2E8F0)),
                             ),
                           ),
                           child: Row(
@@ -2100,7 +2482,8 @@ class _NotificationsSheet extends StatelessWidget {
                             children: [
                               // Icône
                               Container(
-                                width: 40, height: 40,
+                                width: 40,
+                                height: 40,
                                 decoration: BoxDecoration(
                                   color: color.withValues(alpha: 0.12),
                                   shape: BoxShape.circle,
@@ -2114,28 +2497,49 @@ class _NotificationsSheet extends StatelessWidget {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
                                       children: [
                                         Expanded(
-                                          child: Text(title,
-                                              style: TextStyle(
-                                                fontSize: 13.5,
-                                                fontWeight: isUnread ? FontWeight.bold : FontWeight.w600,
-                                                color: titleColor,
-                                              ),
-                                              overflow: TextOverflow.ellipsis),
+                                          child: Text(
+                                            title,
+                                            style: TextStyle(
+                                              fontSize: 13.5,
+                                              fontWeight: isUnread
+                                                  ? FontWeight.bold
+                                                  : FontWeight.w600,
+                                              color: titleColor,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
                                         ),
                                         if (isUnread)
                                           Container(
-                                            width: 8, height: 8,
-                                            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+                                            width: 8,
+                                            height: 8,
+                                            decoration: BoxDecoration(
+                                              color: color,
+                                              shape: BoxShape.circle,
+                                            ),
                                           ),
                                       ],
                                     ),
                                     const SizedBox(height: 3),
-                                    Text(body, style: TextStyle(fontSize: 12.5, color: subColor)),
+                                    Text(
+                                      body,
+                                      style: TextStyle(
+                                        fontSize: 12.5,
+                                        color: subColor,
+                                      ),
+                                    ),
                                     const SizedBox(height: 4),
-                                    Text(time, style: TextStyle(fontSize: 11, color: subColor)),
+                                    Text(
+                                      time,
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: subColor,
+                                      ),
+                                    ),
                                   ],
                                 ),
                               ),

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:easy_localization/easy_localization.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../theme/app_theme.dart';
-import '../core/localization/app_localizations.dart';
 import '../services/firebase_service.dart';
 import 'booking_detail_screen.dart';
 
@@ -54,13 +54,13 @@ class _BookingsScreenState extends State<BookingsScreen>
   String _statusLabel(String status, BuildContext context) {
     switch (status) {
       case 'en_attente':
-        return context.tr('tab_pending');
+        return 'tab_pending'.tr();
       case 'confirmee':
-        return context.tr('tab_confirmed');
+        return 'tab_confirmed'.tr();
       case 'terminee':
-        return context.tr('tab_completed');
+        return 'tab_completed'.tr();
       case 'annulee':
-        return context.tr('tab_cancelled');
+        return 'tab_cancelled'.tr();
       default:
         return status;
     }
@@ -85,7 +85,7 @@ class _BookingsScreenState extends State<BookingsScreen>
       appBar: AppBar(
         automaticallyImplyLeading: false,
         title: Text(
-          context.tr('my_bookings'),
+          'my_bookings'.tr(),
           style: TextStyle(
             fontSize: 20,
             fontWeight: FontWeight.bold,
@@ -182,7 +182,7 @@ class _BookingTabView extends StatelessWidget {
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  context.tr('no_bookings'),
+                  'no_bookings'.tr(),
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
@@ -191,7 +191,7 @@ class _BookingTabView extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  context.tr('adjust_filters_hint'),
+                  'adjust_filters_hint'.tr(),
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 13,
@@ -426,7 +426,7 @@ class _BookingCard extends StatelessWidget {
                             icon: const Icon(Icons.cancel_outlined,
                                 size: 16, color: Color(0xFFDC2626)),
                             label: Text(
-                              context.tr('cancel_booking'),
+                              'cancel_booking'.tr(),
                               style: const TextStyle(
                                 color: Color(0xFFDC2626),
                                 fontSize: 12,
@@ -472,13 +472,13 @@ class _BookingCard extends StatelessWidget {
             const Icon(Icons.warning_amber_rounded,
                 color: Color(0xFFDC2626), size: 24),
             const SizedBox(width: 8),
-            Text(context.tr('booking_cancel_confirm'),
+            Text('booking_cancel_confirm'.tr(),
                 style: const TextStyle(
                     fontSize: 16, fontWeight: FontWeight.bold)),
           ],
         ),
         content: Text(
-          context.tr('booking_cancel_warning'),
+          'booking_cancel_warning'.tr(),
           style: TextStyle(
               fontSize: 14,
               color: AppTheme.subtitleColorOf(context)),
@@ -486,7 +486,7 @@ class _BookingCard extends StatelessWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: Text(context.tr('cancel'),
+            child: Text('cancel'.tr(),
                 style: TextStyle(
                     color: AppTheme.subtitleColorOf(context))),
           ),
@@ -494,8 +494,8 @@ class _BookingCard extends StatelessWidget {
             onPressed: () async {
               Navigator.pop(ctx);
               final messenger = ScaffoldMessenger.of(context);
-              final successMsg = context.tr('booking_cancelled_success');
-              final errorMsg = context.tr('error');
+              final successMsg = 'booking_cancelled_success'.tr();
+              final errorMsg = 'error'.tr();
               final ok = await FirebaseService().cancelBooking(bookingId);
               messenger.showSnackBar(
                 SnackBar(
@@ -511,7 +511,7 @@ class _BookingCard extends StatelessWidget {
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12)),
             ),
-            child: Text(context.tr('confirm')),
+            child: Text('confirm'.tr()),
           ),
         ],
       ),

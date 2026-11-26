@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+
 import '../../screens/splash_screen.dart';
 import '../../screens/onboarding_screen.dart';
 import '../../screens/login_screen.dart';
@@ -16,8 +18,16 @@ import '../../screens/bookings_screen.dart';
 import '../../screens/booking_detail_screen.dart';
 import '../../screens/urgency_screen.dart';
 import '../../screens/map_screen.dart';
+import '../../screens/ai_assistant_screen.dart';
+import '../../screens/commission_management_screen.dart';
+import '../../screens/payment_transaction_screen.dart';
+import '../../screens/professional_earnings_screen.dart';
+import '../../screens/booking_chat_screen.dart';
 
 class AppRoutes {
+  static final GlobalKey<NavigatorState> navigatorKey =
+      GlobalKey<NavigatorState>();
+
   static const String splash = '/';
   static const String onboarding = '/onboarding';
   static const String login = '/login';
@@ -35,10 +45,19 @@ class AppRoutes {
   static const String bookingDetail = '/booking-detail';
   static const String urgency = '/urgency';
   static const String map = '/map';
+  static const String aiAssistant = '/ai-assistant';
+  static const String commissionManagement = '/commission-management';
+  static const String paymentTransactions = '/payment-transactions';
+  static const String professionalEarnings = '/professional-earnings';
+  static const String bookingChat = '/booking-chat';
 
   static Route<dynamic> onGenerateRoute(RouteSettings settings) {
     switch (settings.name) {
       case splash:
+        // Sur Web, pas de splash : redirection directe vers la connexion.
+        if (kIsWeb) {
+          return MaterialPageRoute(builder: (_) => const LoginScreen());
+        }
         return MaterialPageRoute(builder: (_) => const SplashScreen());
 
       case onboarding:
@@ -78,7 +97,9 @@ class AppRoutes {
           builder: (_) => AdminRequestsScreen(
             adminName: args['adminName'] as String? ?? 'Administrateur',
             adminEmail: args['adminEmail'] as String? ?? '',
-            adminRole: (args['isSuperAdmin'] == true || args['adminRole'] == 'super_admin')
+            adminRole:
+                (args['isSuperAdmin'] == true ||
+                    args['adminRole'] == 'super_admin')
                 ? 'super_admin'
                 : 'admin',
           ),
@@ -118,11 +139,23 @@ class AppRoutes {
           builder: (_) => BookingDetailScreen(booking: booking),
         );
 
+      case bookingChat:
+        final booking = settings.arguments as Map<String, dynamic>? ?? {};
+        return MaterialPageRoute(
+          builder: (_) => BookingChatScreen(booking: booking),
+        );
+
       case urgency:
         return MaterialPageRoute(builder: (_) => const UrgencyScreen());
 
       case map:
         return MaterialPageRoute(builder: (_) => const MapScreen());
+
+      case aiAssistant:
+        final location = settings.arguments as String?;
+        return MaterialPageRoute(
+          builder: (_) => AiAssistantScreen(userLocation: location),
+        );
 
       case checkout:
         final args = settings.arguments as Map<String, dynamic>? ?? {};
@@ -148,16 +181,27 @@ class AppRoutes {
         );
 
       case paymentHistory:
+        return MaterialPageRoute(builder: (_) => const PaymentHistoryScreen());
+
+      case commissionManagement:
         return MaterialPageRoute(
-          builder: (_) => const PaymentHistoryScreen(),
+          builder: (_) => const CommissionManagementScreen(),
+        );
+
+      case paymentTransactions:
+        return MaterialPageRoute(
+          builder: (_) => const PaymentTransactionScreen(),
+        );
+
+      case professionalEarnings:
+        return MaterialPageRoute(
+          builder: (_) => const ProfessionalEarningsScreen(),
         );
 
       default:
         return MaterialPageRoute(
           builder: (_) => Scaffold(
-            body: Center(
-              child: Text('Route non trouvée : ${settings.name}'),
-            ),
+            body: Center(child: Text('Route non trouvée : ${settings.name}')),
           ),
         );
     }

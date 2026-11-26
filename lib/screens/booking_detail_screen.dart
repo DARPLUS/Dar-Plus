@@ -1,13 +1,74 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../theme/app_theme.dart';
-import '../core/localization/app_localizations.dart';
-import '../services/firebase_service.dart';
 
-class BookingDetailScreen extends StatelessWidget {
+import '../theme/app_theme.dart';
+import '../services/call_service.dart';
+import '../services/firebase_service.dart';
+import 'booking_chat_screen.dart';
+import 'booking_rating_screen.dart';
+import '../widgets/booking_report_button.dart';
+
+import 'package:easy_localization/easy_localization.dart';
+
+class BookingDetailScreen extends StatefulWidget {
   final Map<String, dynamic> booking;
 
   const BookingDetailScreen({super.key, required this.booking});
+
+  @override
+  State<BookingDetailScreen> createState() => _BookingDetailScreenState();
+}
+
+class _BookingDetailScreenState extends State<BookingDetailScreen> {
+  late final Map<String, dynamic> _booking;
+  Map<String, dynamic> get booking => _booking;
+  bool _hasSubmittedRating = false;
+  bool _ratingPageOpen = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _booking = Map<String, dynamic>.from(widget.booking);
+    _hasSubmittedRating = booking['clientReviewSubmitted'] == true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _prepareRatingPrompt();
+    });
+  }
+
+  Future<void> _prepareRatingPrompt() async {
+    final bookingId = booking['id']?.toString() ?? '';
+    if (booking['status'] != 'terminee' || bookingId.isEmpty) return;
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('bookings')
+          .doc(bookingId)
+          .get();
+      if (snapshot.exists && mounted) {
+        booking.addAll(snapshot.data()!);
+        booking['id'] = bookingId;
+        _hasSubmittedRating = booking['clientReviewSubmitted'] == true;
+      }
+    } catch (_) {}
+    if (mounted && !_hasSubmittedRating) _openRatingPage();
+  }
+
+  Future<void> _openRatingPage() async {
+    if (!mounted || _ratingPageOpen) return;
+    _ratingPageOpen = true;
+    final submitted = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => BookingRatingScreen(
+          booking: booking,
+          isProfessional: false,
+          alreadySubmitted: _hasSubmittedRating,
+        ),
+      ),
+    );
+    _ratingPageOpen = false;
+    if (submitted == true && mounted) {
+      setState(() => _hasSubmittedRating = true);
+    }
+  }
 
   Color _statusColor(String status) {
     switch (status) {
@@ -27,13 +88,13 @@ class BookingDetailScreen extends StatelessWidget {
   String _statusLabel(String status, BuildContext context) {
     switch (status) {
       case 'en_attente':
-        return context.tr('tab_pending');
+        return 'tab_pending'.tr();
       case 'confirmee':
-        return context.tr('tab_confirmed');
+        return 'tab_confirmed'.tr();
       case 'terminee':
-        return context.tr('tab_completed');
+        return 'tab_completed'.tr();
       case 'annulee':
-        return context.tr('tab_cancelled');
+        return 'tab_cancelled'.tr();
       default:
         return status;
     }
@@ -44,8 +105,18 @@ class BookingDetailScreen extends StatelessWidget {
       final dt = ts.toDate();
       final days = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
       final months = [
-        'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
-        'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'
+        'janvier',
+        'février',
+        'mars',
+        'avril',
+        'mai',
+        'juin',
+        'juillet',
+        'août',
+        'septembre',
+        'octobre',
+        'novembre',
+        'décembre',
       ];
       return '${days[dt.weekday - 1]} ${dt.day} ${months[dt.month - 1]} ${dt.year}';
     }
@@ -78,6 +149,7 @@ class BookingDetailScreen extends StatelessWidget {
     final status = booking['status'] as String? ?? 'en_attente';
     final color = _statusColor(status);
     final proName = booking['proName'] as String? ?? 'Professionnel';
+    final proId = booking['proId']?.toString() ?? '';
     final proPhone = booking['proPhone'] as String? ?? '';
     final serviceType = booking['serviceType'] as String? ?? '';
     final price = booking['price'] as String? ?? '';
@@ -88,12 +160,16 @@ class BookingDetailScreen extends StatelessWidget {
     final bookingId = booking['id'] as String? ?? '';
     final isCancellable = status == 'en_attente';
     final isCancelled = status == 'annulee';
+    final canChat =
+        status == 'confirmee' ||
+        status == 'terminee' ||
+        (status == 'annulee' && booking['acceptedAt'] is Timestamp);
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: Text(
-          context.tr('booking_detail_title'),
+          'booking_detail_title'.tr(),
           style: TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.bold,
@@ -156,9 +232,12 @@ class BookingDetailScreen extends StatelessWidget {
                         const SizedBox(height: 4),
                         Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 2),
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF0D544E).withValues(alpha: 0.1),
+                            color: const Color(0xFF0D544E)
+                                .withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Text(
@@ -174,8 +253,10 @@ class BookingDetailScreen extends StatelessWidget {
                     ),
                   ),
                   Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 5,
+                    ),
                     decoration: BoxDecoration(
                       color: color.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(20),
@@ -196,7 +277,11 @@ class BookingDetailScreen extends StatelessWidget {
             const SizedBox(height: 20),
 
             // ── 2. Informations ──────────────────────────────────────
-            _SectionTitle(title: context.tr('booking_date'), icon: Icons.info_outline_rounded, titleColor: titleColor),
+            _SectionTitle(
+              title: 'booking_date'.tr(),
+              icon: Icons.info_outline_rounded,
+              titleColor: titleColor,
+            ),
             const SizedBox(height: 10),
             Container(
               padding: const EdgeInsets.all(16),
@@ -209,7 +294,7 @@ class BookingDetailScreen extends StatelessWidget {
                 children: [
                   _InfoRow(
                     icon: Icons.tag_rounded,
-                    label: context.tr('booking_id'),
+                    label: 'booking_id'.tr(),
                     value: bookingId.length > 12
                         ? '...${bookingId.substring(bookingId.length - 8)}'
                         : bookingId,
@@ -219,15 +304,17 @@ class BookingDetailScreen extends StatelessWidget {
                   _Divider(isDark: isDark),
                   _InfoRow(
                     icon: Icons.event_rounded,
-                    label: context.tr('booking_date'),
-                    value: scheduledDate.isNotEmpty ? scheduledDate : createdDate,
+                    label: 'booking_date'.tr(),
+                    value: scheduledDate.isNotEmpty
+                        ? scheduledDate
+                        : createdDate,
                     subColor: subColor,
                     titleColor: titleColor,
                   ),
                   _Divider(isDark: isDark),
                   _InfoRow(
                     icon: Icons.location_on_rounded,
-                    label: context.tr('booking_address'),
+                    label: 'booking_address'.tr(),
                     value: address,
                     subColor: subColor,
                     titleColor: titleColor,
@@ -246,7 +333,7 @@ class BookingDetailScreen extends StatelessWidget {
                     _Divider(isDark: isDark),
                     _InfoRow(
                       icon: Icons.description_rounded,
-                      label: context.tr('need_description'),
+                      label: 'need_description'.tr(),
                       value: description,
                       subColor: subColor,
                       titleColor: titleColor,
@@ -259,11 +346,12 @@ class BookingDetailScreen extends StatelessWidget {
             const SizedBox(height: 20),
 
             // ── 3. Contact pro ───────────────────────────────────────
-            if (proPhone.isNotEmpty) ...[
+            if (proPhone.isNotEmpty || proId.isNotEmpty) ...[
               _SectionTitle(
-                  title: context.tr('contact_pro'),
-                  icon: Icons.phone_rounded,
-                  titleColor: titleColor),
+                title: 'contact_pro'.tr(),
+                icon: Icons.phone_rounded,
+                titleColor: titleColor,
+              ),
               const SizedBox(height: 10),
               Container(
                 padding: const EdgeInsets.all(16),
@@ -280,8 +368,11 @@ class BookingDetailScreen extends StatelessWidget {
                         color: const Color(0xFF0D544E).withValues(alpha: 0.1),
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.phone_rounded,
-                          color: Color(0xFF0D544E), size: 20),
+                      child: const Icon(
+                        Icons.phone_rounded,
+                        color: Color(0xFF0D544E),
+                        size: 20,
+                      ),
                     ),
                     const SizedBox(width: 14),
                     Expanded(
@@ -291,34 +382,41 @@ class BookingDetailScreen extends StatelessWidget {
                           Text(
                             proName,
                             style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.bold,
-                                color: titleColor),
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: titleColor,
+                            ),
                           ),
-                          Text(proPhone,
-                              style: TextStyle(fontSize: 13, color: subColor)),
+                          if (proPhone.isNotEmpty)
+                            Text(
+                              proPhone,
+                              style: TextStyle(fontSize: 13, color: subColor),
+                            ),
                         ],
                       ),
                     ),
-                    OutlinedButton(
-                      onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                                '${context.tr("call_pro")} : $proPhone'),
-                            backgroundColor: const Color(0xFF0D544E),
-                          ),
-                        );
-                      },
+                    OutlinedButton.icon(
+                      onPressed: proId.isEmpty
+                          ? null
+                          : () => CallService.instance.startCall(
+                              calleeId: proId,
+                              calleeName: proName,
+                              bookingId: bookingId,
+                              serviceType: serviceType,
+                            ),
+                      icon: const Icon(Icons.call_rounded, size: 18),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: const Color(0xFF0D544E),
                         side: const BorderSide(color: Color(0xFF0D544E)),
                         shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12)),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 10),
+                          horizontal: 16,
+                          vertical: 10,
+                        ),
                       ),
-                      child: Text(context.tr('call')),
+                      label: Text('call'.tr()),
                     ),
                   ],
                 ),
@@ -326,12 +424,75 @@ class BookingDetailScreen extends StatelessWidget {
               const SizedBox(height: 20),
             ],
 
+            if (status == 'terminee' && bookingId.isNotEmpty) ...[
+              _SectionTitle(
+                title: 'rating_page_title'.tr(),
+                icon: Icons.star_rate_rounded,
+                titleColor: titleColor,
+              ),
+              const SizedBox(height: 10),
+              if (_hasSubmittedRating)
+                Card(
+                  child: ListTile(
+                    leading: const Icon(
+                      Icons.check_circle_rounded,
+                      color: Color(0xFF10B981),
+                    ),
+                    title: Text('${'rating_already_submitted'.tr()} $proName.'),
+                  ),
+                )
+              else
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: _openRatingPage,
+                    icon: const Icon(Icons.star_rate_rounded),
+                    label: Text('rating_rate_professional'.tr()),
+                  ),
+                ),
+              const SizedBox(height: 20),
+            ],
+            if (canChat) ...[
+              SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: ElevatedButton.icon(
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => BookingChatScreen(booking: booking),
+                    ),
+                  ),
+                  icon: const Icon(Icons.chat_bubble_outline_rounded),
+                  label: Text(
+                    'booking_chat_action'.tr(),
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF14532D),
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+            ],
+
+            BookingReportButton(booking: booking, isProfessional: false),
+            const SizedBox(height: 20),
+
             // ── 4. Timeline statut ───────────────────────────────────
             if (!isCancelled) ...[
               _SectionTitle(
-                  title: context.tr('status'),
-                  icon: Icons.timeline_rounded,
-                  titleColor: titleColor),
+                title: 'status'.tr(),
+                icon: Icons.timeline_rounded,
+                titleColor: titleColor,
+              ),
               const SizedBox(height: 10),
               Container(
                 padding: const EdgeInsets.all(16),
@@ -344,10 +505,10 @@ class BookingDetailScreen extends StatelessWidget {
                   currentStep: _timelineStep(status),
                   isDark: isDark,
                   labels: [
-                    context.tr('booking_timeline_request'),
-                    context.tr('booking_timeline_confirm'),
-                    context.tr('booking_timeline_progress'),
-                    context.tr('booking_timeline_done'),
+                    'booking_timeline_request'.tr(),
+                    'booking_timeline_confirm'.tr(),
+                    'booking_timeline_progress'.tr(),
+                    'booking_timeline_done'.tr(),
                   ],
                 ),
               ),
@@ -363,16 +524,19 @@ class BookingDetailScreen extends StatelessWidget {
                   onPressed: () => _confirmCancel(context, bookingId),
                   icon: const Icon(Icons.cancel_rounded),
                   label: Text(
-                    context.tr('cancel_booking'),
+                    'cancel_booking'.tr(),
                     style: const TextStyle(
-                        fontSize: 15, fontWeight: FontWeight.bold),
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFFDC2626),
                     foregroundColor: Colors.white,
                     elevation: 0,
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16)),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
                   ),
                 ),
               ),
@@ -388,26 +552,32 @@ class BookingDetailScreen extends StatelessWidget {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(children: [
-          const Icon(Icons.warning_amber_rounded,
-              color: Color(0xFFDC2626), size: 24),
-          const SizedBox(width: 8),
-          Text(context.tr('booking_cancel_confirm'),
-              style:
-                  const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-        ]),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            const Icon(
+              Icons.warning_amber_rounded,
+              color: Color(0xFFDC2626),
+              size: 24,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              'booking_cancel_confirm'.tr(),
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
         content: Text(
-          'Voulez-vous vraiment annuler cette réservation ?',
+          'booking_cancel_warning'.tr(),
           style: TextStyle(color: AppTheme.subtitleColorOf(context)),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: Text(context.tr('cancel'),
-                style:
-                    TextStyle(color: AppTheme.subtitleColorOf(context))),
+            child: Text(
+              'cancel'.tr(),
+              style: TextStyle(color: AppTheme.subtitleColorOf(context)),
+            ),
           ),
           ElevatedButton(
             onPressed: () async {
@@ -417,9 +587,9 @@ class BookingDetailScreen extends StatelessWidget {
               if (context.mounted) {
                 messenger.showSnackBar(
                   SnackBar(
-                    content: Text(ok
-                        ? context.tr('booking_cancelled_success')
-                        : context.tr('error')),
+                    content: Text(
+                      ok ? 'booking_cancelled_success'.tr() : 'error'.tr(),
+                    ),
                     backgroundColor: ok
                         ? const Color(0xFF10B981)
                         : const Color(0xFFDC2626),
@@ -432,9 +602,10 @@ class BookingDetailScreen extends StatelessWidget {
               backgroundColor: const Color(0xFFDC2626),
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
+                borderRadius: BorderRadius.circular(12),
+              ),
             ),
-            child: Text(context.tr('confirm')),
+            child: Text('confirm'.tr()),
           ),
         ],
       ),
@@ -448,8 +619,11 @@ class _SectionTitle extends StatelessWidget {
   final String title;
   final IconData icon;
   final Color titleColor;
-  const _SectionTitle(
-      {required this.title, required this.icon, required this.titleColor});
+  const _SectionTitle({
+    required this.title,
+    required this.icon,
+    required this.titleColor,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -460,7 +634,10 @@ class _SectionTitle extends StatelessWidget {
         Text(
           title,
           style: TextStyle(
-              fontSize: 15, fontWeight: FontWeight.bold, color: titleColor),
+            fontSize: 15,
+            fontWeight: FontWeight.bold,
+            color: titleColor,
+          ),
         ),
       ],
     );
@@ -473,12 +650,13 @@ class _InfoRow extends StatelessWidget {
   final String value;
   final Color subColor;
   final Color titleColor;
-  const _InfoRow(
-      {required this.icon,
-      required this.label,
-      required this.value,
-      required this.subColor,
-      required this.titleColor});
+  const _InfoRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.subColor,
+    required this.titleColor,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -493,14 +671,16 @@ class _InfoRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(label,
-                    style: TextStyle(fontSize: 11, color: subColor)),
+                Text(label, style: TextStyle(fontSize: 11, color: subColor)),
                 const SizedBox(height: 2),
-                Text(value,
-                    style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: titleColor)),
+                Text(
+                  value,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: titleColor,
+                  ),
+                ),
               ],
             ),
           ),
@@ -528,10 +708,11 @@ class _TimelineWidget extends StatelessWidget {
   final bool isDark;
   final List<String> labels;
 
-  const _TimelineWidget(
-      {required this.currentStep,
-      required this.isDark,
-      required this.labels});
+  const _TimelineWidget({
+    required this.currentStep,
+    required this.isDark,
+    required this.labels,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -555,18 +736,23 @@ class _TimelineWidget extends StatelessWidget {
                         color: isDone
                             ? const Color(0xFF0D544E)
                             : (isDark
-                                ? const Color(0xFF334155)
-                                : const Color(0xFFE2E8F0)),
+                                  ? const Color(0xFF334155)
+                                  : const Color(0xFFE2E8F0)),
                         shape: BoxShape.circle,
                         border: isActive
                             ? Border.all(
-                                color: const Color(0xFF0D544E).withValues(alpha: 0.3),
-                                width: 4)
+                                color: const Color(0xFF0D544E)
+                                    .withValues(alpha: 0.3),
+                                width: 4,
+                              )
                             : null,
                       ),
                       child: isDone
-                          ? const Icon(Icons.check_rounded,
-                              color: Colors.white, size: 14)
+                          ? const Icon(
+                              Icons.check_rounded,
+                              color: Colors.white,
+                              size: 14,
+                            )
                           : null,
                     ),
                     const SizedBox(height: 6),
@@ -594,8 +780,8 @@ class _TimelineWidget extends StatelessWidget {
                     color: i < currentStep
                         ? const Color(0xFF0D544E)
                         : (isDark
-                            ? const Color(0xFF334155)
-                            : const Color(0xFFE2E8F0)),
+                              ? const Color(0xFF334155)
+                              : const Color(0xFFE2E8F0)),
                   ),
                 ),
             ],

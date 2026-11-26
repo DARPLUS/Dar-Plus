@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:provider/provider.dart';
+
 import '../providers/theme_provider.dart';
 import '../providers/locale_provider.dart';
 import '../services/firebase_service.dart';
 import '../services/notification_service.dart';
 import 'login_screen.dart';
-import 'home_screen.dart';
 import 'admin_requests_screen.dart';
 
 enum AccountType { client, professionnel, admin }
@@ -14,10 +14,7 @@ enum AccountType { client, professionnel, admin }
 class RegisterScreen extends StatefulWidget {
   final AccountType initialType;
 
-  const RegisterScreen({
-    super.key,
-    this.initialType = AccountType.client,
-  });
+  const RegisterScreen({super.key, this.initialType = AccountType.client});
 
   @override
   State<RegisterScreen> createState() => _RegisterScreenState();
@@ -99,7 +96,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
       return;
     }
 
-    if (_accountType == AccountType.professionnel && _selectedServiceType == null) {
+    if (_accountType == AccountType.professionnel &&
+        _selectedServiceType == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Veuillez sélectionner votre domaine de service.'),
@@ -126,6 +124,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         phone: phone,
         email: _emailController.text,
         password: _passwordController.text,
+        languageCode: context.locale.languageCode,
       );
 
       if (!mounted) return;
@@ -134,7 +133,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
       });
 
       if (result['success'] == true) {
-        _showClientEmailVerificationDialog(_emailController.text);
+        _showClientEmailVerificationDialog(
+          _emailController.text,
+          emailSent: result['emailSent'] == true,
+          isDemo: result['isDemo'] == true,
+        );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -192,9 +195,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
             Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (_) => AdminRequestsScreen(
-                  highlightAppId: proApp.id,
-                ),
+                builder: (_) => AdminRequestsScreen(highlightAppId: proApp.id),
               ),
             );
           },
@@ -237,13 +238,21 @@ class _RegisterScreenState extends State<RegisterScreen> {
     }
   }
 
-  void _showClientEmailVerificationDialog(String email) {
+  void _showClientEmailVerificationDialog(
+    String email, {
+    required bool emailSent,
+    required bool isDemo,
+  }) {
+    var isResending = false;
+    String? resendMessage;
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) {
-        return Dialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
           child: Padding(
             padding: const EdgeInsets.all(24),
             child: Column(
@@ -257,24 +266,28 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(
-                    Icons.check_circle_rounded,
+                    Icons.mark_email_read_outlined,
                     color: Color(0xFF10B981),
                     size: 40,
                   ),
                 ),
                 const SizedBox(height: 18),
-                const Text(
-                  'Compte Client créé !',
+                Text(
+                  'verification_title'.tr(),
                   textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 22,
+                  style: const TextStyle(
+                    fontSize: 21,
                     fontWeight: FontWeight.bold,
                     color: Color(0xFF0F172A),
                   ),
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'Félicitations ${_fullNameController.text} !\nVotre compte client a été créé avec succès avec l\'adresse :\n$email',
+                  isDemo
+                      ? 'verification_demo_message'.tr(args: [email])
+                      : emailSent
+                      ? 'verification_sent_message'.tr(args: [email])
+                      : 'verification_failed_message'.tr(args: [email]),
                   textAlign: TextAlign.center,
                   style: const TextStyle(
                     fontSize: 14,
@@ -282,35 +295,61 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     height: 1.45,
                   ),
                 ),
-                const SizedBox(height: 24),
-                // Button 1: Accéder immédiatement à l'espace client
+                if (resendMessage != null) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    resendMessage!,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: Color(0xFF0D544E),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 22),
+                if (!isDemo)
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: OutlinedButton.icon(
+                      onPressed: isResending
+                          ? null
+                          : () async {
+                              setDialogState(() => isResending = true);
+                              final result = await FirebaseService()
+                                  .resendClientVerificationEmail(
+                                    languageCode: context.locale.languageCode,
+                                  );
+                              if (!dialogContext.mounted) return;
+                              setDialogState(() {
+                                isResending = false;
+                                resendMessage = result['message'] as String?;
+                              });
+                            },
+                      icon: isResending
+                          ? const SizedBox(
+                              width: 17,
+                              height: 17,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.mark_email_unread_outlined),
+                      label: Text('verification_resend'.tr()),
+                    ),
+                  ),
+                if (!isDemo) const SizedBox(height: 10),
                 SizedBox(
                   width: double.infinity,
-                  height: 50,
-                  child: ElevatedButton.icon(
+                  height: 48,
+                  child: ElevatedButton(
                     onPressed: () {
-                      Navigator.pop(ctx);
-                      Navigator.of(context).pushAndRemoveUntil(
+                      Navigator.pop(dialogContext);
+                      Navigator.of(context).pushReplacement(
                         MaterialPageRoute(
-                          builder: (_) => HomeScreen(
-                            userName: _fullNameController.text.trim().isNotEmpty
-                                ? _fullNameController.text.trim()
-                                : 'Client',
-                            userEmail: _emailController.text.trim(),
-                            userPhone: _phoneController.text.trim(),
-                          ),
+                          builder: (_) => LoginScreen(prefilledEmail: email),
                         ),
-                        (route) => false,
                       );
                     },
-                    icon: const Icon(Icons.arrow_forward_rounded, size: 18),
-                    label: const Text(
-                      'Accéder à mon espace',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF0D544E),
                       foregroundColor: Colors.white,
@@ -319,43 +358,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         borderRadius: BorderRadius.circular(16),
                       ),
                     ),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                // Button 2: Aller à la connexion
-                SizedBox(
-                  width: double.infinity,
-                  height: 46,
-                  child: OutlinedButton(
-                    onPressed: () {
-                      Navigator.pop(ctx);
-                      Navigator.of(context).pushReplacement(
-                        MaterialPageRoute(
-                          builder: (_) => LoginScreen(prefilledEmail: email),
-                        ),
-                      );
-                    },
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: const Color(0xFF0D544E),
-                      side: const BorderSide(color: Color(0xFF0D544E)),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                    ),
-                    child: const Text(
-                      'Se connecter',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
+                    child: Text('verification_go_to_login'.tr()),
                   ),
                 ),
               ],
             ),
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 
@@ -365,7 +375,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
       barrierDismissible: false,
       builder: (ctx) {
         return Dialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
           child: Padding(
             padding: const EdgeInsets.all(24),
             child: Column(
@@ -448,7 +460,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
       barrierDismissible: false,
       builder: (ctx) {
         return Dialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
           child: Padding(
             padding: const EdgeInsets.all(24),
             child: Column(
@@ -531,10 +545,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
     context.watch<LocaleProvider>();
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cardBg = isDark ? const Color(0xFF1E293B) : Colors.white;
-    final inputBorderColor = isDark ? const Color(0xFF334155) : const Color(0xFFDDE3EA);
+    final inputBorderColor = isDark
+        ? const Color(0xFF334155)
+        : const Color(0xFFDDE3EA);
     final textColor = isDark ? Colors.white : const Color(0xFF0F172A);
     final subColor = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
-    final scaffoldBg = isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC);
+    final scaffoldBg = isDark
+        ? const Color(0xFF0F172A)
+        : const Color(0xFFF8FAFC);
 
     return Scaffold(
       backgroundColor: scaffoldBg,
@@ -591,7 +609,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         width: 38,
                         height: 38,
                         fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
+                        errorBuilder: (context, error, stackTrace) =>
+                            const SizedBox.shrink(),
                       ),
                     ),
                   ],
@@ -626,7 +645,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   height: 52,
                   padding: const EdgeInsets.all(4),
                   decoration: BoxDecoration(
-                    color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE6EEEC),
+                    color: isDark
+                        ? const Color(0xFF1E293B)
+                        : const Color(0xFFE6EEEC),
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: Row(
@@ -662,8 +683,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 _buildCustomTextField(
                   controller: _fullNameController,
                   hintText: 'fullname_hint'.tr(),
-                  validator: (v) =>
-                      v == null || v.trim().isEmpty ? 'Veuillez saisir votre nom complet' : null,
+                  validator: (v) => v == null || v.trim().isEmpty
+                      ? 'Veuillez saisir votre nom complet'
+                      : null,
                 ),
 
                 const SizedBox(height: 18),
@@ -674,8 +696,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   controller: _emailController,
                   hintText: 'email_hint'.tr(),
                   keyboardType: TextInputType.emailAddress,
-                  validator: (v) =>
-                      v == null || !v.contains('@') ? 'Veuillez saisir une adresse e-mail valide' : null,
+                  validator: (v) => v == null || !v.contains('@')
+                      ? 'Veuillez saisir une adresse e-mail valide'
+                      : null,
                 ),
 
                 // Si Professionnel : Spécialité et Téléphone pro
@@ -692,17 +715,32 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       initialValue: _selectedServiceType,
                       dropdownColor: cardBg,
                       decoration: InputDecoration(
-                        prefixIcon: const Icon(Icons.handyman_outlined, color: Color(0xFF0D544E), size: 20),
+                        prefixIcon: const Icon(
+                          Icons.handyman_outlined,
+                          color: Color(0xFF0D544E),
+                          size: 20,
+                        ),
                         border: InputBorder.none,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 14,
+                        ),
                       ),
                       hint: Text(
                         'select_specialty_hint'.tr(),
-                        style: TextStyle(color: isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8), fontSize: 14.5),
+                        style: TextStyle(
+                          color: isDark
+                              ? const Color(0xFF64748B)
+                              : const Color(0xFF94A3B8),
+                          fontSize: 14.5,
+                        ),
                       ),
                       icon: Padding(
                         padding: const EdgeInsets.only(right: 14),
-                        child: Icon(Icons.keyboard_arrow_down_rounded, color: subColor),
+                        child: Icon(
+                          Icons.keyboard_arrow_down_rounded,
+                          color: subColor,
+                        ),
                       ),
                       isExpanded: true,
                       items: _serviceTypes.map((service) {
@@ -719,7 +757,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           _selectedServiceType = val;
                         });
                       },
-                      validator: (v) => v == null ? 'Veuillez sélectionner un métier' : null,
+                      validator: (v) =>
+                          v == null ? 'Veuillez sélectionner un métier' : null,
                     ),
                   ),
 
@@ -729,8 +768,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     controller: _phoneController,
                     hintText: '+216 52 123 456',
                     keyboardType: TextInputType.phone,
-                    validator: (v) =>
-                        v == null || v.trim().isEmpty ? 'Numéro de téléphone requis' : null,
+                    validator: (v) => v == null || v.trim().isEmpty
+                        ? 'Numéro de téléphone requis'
+                        : null,
                   ),
 
                   const SizedBox(height: 18),
@@ -771,20 +811,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   onChanged: (val) {
                     if (_confirmPasswordController.text.isNotEmpty) {
                       setState(() {
-                        _passwordMismatch = _confirmPasswordController.text != val;
+                        _passwordMismatch =
+                            _confirmPasswordController.text != val;
                       });
                     }
                   },
-                  validator: (v) =>
-                      v == null || v.length < 6 ? 'Le mot de passe doit comporter au moins 6 caractères' : null,
+                  validator: (v) => v == null || v.length < 6
+                      ? 'Le mot de passe doit comporter au moins 6 caractères'
+                      : null,
                 ),
                 const SizedBox(height: 6),
                 Text(
                   'password_requirements'.tr(),
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: subColor,
-                  ),
+                  style: TextStyle(fontSize: 12, color: subColor),
                 ),
 
                 const SizedBox(height: 18),
@@ -804,7 +843,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   },
                   onChanged: (val) {
                     setState(() {
-                      _passwordMismatch = val.isNotEmpty && val != _passwordController.text;
+                      _passwordMismatch =
+                          val.isNotEmpty && val != _passwordController.text;
                     });
                   },
                   validator: (v) {
@@ -855,16 +895,24 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         width: 22,
                         height: 22,
                         decoration: BoxDecoration(
-                          color: _acceptTerms ? const Color(0xFF0D544E) : cardBg,
+                          color: _acceptTerms
+                              ? const Color(0xFF0D544E)
+                              : cardBg,
                           borderRadius: BorderRadius.circular(6),
                           border: Border.all(
-                            color: _acceptTerms ? const Color(0xFF0D544E) : inputBorderColor,
+                            color: _acceptTerms
+                                ? const Color(0xFF0D544E)
+                                : inputBorderColor,
                             width: 1.5,
                           ),
                         ),
                         alignment: Alignment.center,
                         child: _acceptTerms
-                            ? const Icon(Icons.check, size: 16, color: Colors.white)
+                            ? const Icon(
+                                Icons.check,
+                                size: 16,
+                                color: Colors.white,
+                              )
                             : null,
                       ),
                       const SizedBox(width: 10),
@@ -873,7 +921,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           'accept_terms'.tr(),
                           style: TextStyle(
                             fontSize: 13,
-                            color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF334155),
+                            color: isDark
+                                ? const Color(0xFF94A3B8)
+                                : const Color(0xFF334155),
                             height: 1.35,
                           ),
                         ),
@@ -961,10 +1011,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   children: [
                     Text(
                       '${'already_registered'.tr()} ',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: subColor,
-                      ),
+                      style: TextStyle(fontSize: 14, color: subColor),
                     ),
                     GestureDetector(
                       onTap: () {
@@ -1024,7 +1071,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cardBg = isDark ? const Color(0xFF1E293B) : Colors.white;
-    final inputBorderColor = isDark ? const Color(0xFF334155) : const Color(0xFFDDE3EA);
+    final inputBorderColor = isDark
+        ? const Color(0xFF334155)
+        : const Color(0xFFDDE3EA);
     final textColor = isDark ? Colors.white : const Color(0xFF0F172A);
     final subColor = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
 
@@ -1047,7 +1096,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
         ),
         filled: true,
         fillColor: hasError ? const Color(0xFFFEF2F2) : cardBg,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 18,
+          vertical: 16,
+        ),
         suffixIcon: isPassword
             ? IconButton(
                 icon: Icon(
@@ -1083,17 +1135,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(
-            color: Color(0xFFE53935),
-            width: 1.5,
-          ),
+          borderSide: const BorderSide(color: Color(0xFFE53935), width: 1.5),
         ),
         focusedErrorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(
-            color: Color(0xFFE53935),
-            width: 1.5,
-          ),
+          borderSide: const BorderSide(color: Color(0xFFE53935), width: 1.5),
         ),
       ),
     );
@@ -1107,7 +1153,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cardBg = isDark ? const Color(0xFF1E293B) : Colors.white;
-    final unselectedColor = isDark ? const Color(0xFF94A3B8) : const Color(0xFF475569);
+    final unselectedColor = isDark
+        ? const Color(0xFF94A3B8)
+        : const Color(0xFF475569);
 
     return Expanded(
       child: GestureDetector(

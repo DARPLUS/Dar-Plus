@@ -1,8 +1,10 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:lottie/lottie.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+
 import '../theme/app_theme.dart';
 import '../services/firebase_service.dart';
 import 'onboarding_screen.dart';
@@ -46,11 +48,12 @@ class _SplashScreenState extends State<SplashScreen>
       // 1. Sur Web : vérifier d'abord un résultat de redirect Google en attente
       if (kIsWeb) {
         try {
-          final redirectResult = await FirebaseAuth.instance.getRedirectResult();
+          final redirectResult = await FirebaseAuth.instance
+              .getRedirectResult();
           if (redirectResult.user != null && mounted) {
             final result = await FirebaseService().signInWithGoogle();
             if (result['success'] == true && mounted) {
-              _navigateByRole(result);
+              await _navigateByRole(result);
               return;
             }
           }
@@ -61,25 +64,37 @@ class _SplashScreenState extends State<SplashScreen>
       final currentUser = FirebaseAuth.instance.currentUser;
       if (currentUser != null && mounted) {
         try {
+          await currentUser.reload();
+          final refreshedUser =
+              FirebaseAuth.instance.currentUser ?? currentUser;
           final data = await FirebaseService().getCurrentUserData();
           if (data != null && mounted) {
-            final role = (data['role'] as String?)?.toLowerCase() ?? 'client';
+            final role = await FirebaseService().resolveEffectiveRole(
+              email: (data['email'] as String?) ?? refreshedUser.email ?? '',
+              profileRole: data['role'] as String?,
+            );
             final fullName = data['fullName'] as String? ?? 'Utilisateur';
-            final email = data['email'] as String? ?? currentUser.email ?? '';
+            final email = data['email'] as String? ?? refreshedUser.email ?? '';
             final phone = data['phone'] as String? ?? '';
             final serviceType = data['serviceType'] as String? ?? 'Plomberie';
             final mustChange = data['mustChangePassword'] == true;
 
-            _navigateByRole({
-              'success': true,
-              'role': role,
-              'fullName': fullName,
-              'email': email,
-              'phone': phone,
-              'serviceType': serviceType,
-              'mustChangePassword': mustChange,
-            });
-            return;
+            if (role == 'client' && !refreshedUser.emailVerified) {
+              await FirebaseService().signOut();
+            } else {
+              await _navigateByRole({
+                'success': true,
+                'role': role,
+                'fullName': fullName,
+                'email': email,
+                'phone': phone,
+                'serviceType': serviceType,
+                'mustChangePassword': mustChange,
+              });
+              return;
+            }
+          } else if (data == null && !refreshedUser.emailVerified) {
+            await FirebaseService().signOut();
           }
         } catch (_) {}
       }
@@ -107,7 +122,7 @@ class _SplashScreenState extends State<SplashScreen>
     super.dispose();
   }
 
-  void _navigateByRole(Map<String, dynamic> result) {
+  Future<void> _navigateByRole(Map<String, dynamic> result) async {
     if (!mounted) return;
     final role = (result['role'] as String?)?.toLowerCase() ?? 'client';
     final fullName = result['fullName'] as String? ?? 'Utilisateur';
@@ -115,6 +130,15 @@ class _SplashScreenState extends State<SplashScreen>
     final phone = result['phone'] as String? ?? '';
     final serviceType = result['serviceType'] as String? ?? 'Plomberie';
     final mustChange = result['mustChangePassword'] == true;
+
+    if ((role == 'admin' || role == 'super_admin') && !kIsWeb) {
+      await FirebaseService().signOut();
+      if (!mounted) return;
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const AdminWebOnlyScreen()),
+      );
+      return;
+    }
 
     Widget screen;
     if (role == 'admin' || role == 'super_admin') {
@@ -128,7 +152,11 @@ class _SplashScreenState extends State<SplashScreen>
     } else if (role == 'professionnel') {
       screen = ProHomeScreen(proName: fullName, serviceType: serviceType);
     } else {
-      screen = HomeScreen(userName: fullName, userEmail: email, userPhone: phone);
+      screen = HomeScreen(
+        userName: fullName,
+        userEmail: email,
+        userPhone: phone,
+      );
     }
 
     Navigator.of(context).pushReplacement(

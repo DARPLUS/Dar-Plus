@@ -12,7 +12,20 @@
           "package_name": "com.darplus.dar_plus"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "295698733625-dukj918rskdtqsotnurn6amu43qjube5.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.darplus.dar_plus",
+            "certificate_hash": "7b34f6bae5306437ad0bc348d653891e3b392376"
+          }
+        },
+        {
+          "client_id": "295698733625-i9j6uud6nchp45p2la9ch778hgdj131p.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyBBr6ZEHLCYb30Qh07TzlWntn6WCr6NEH0"
@@ -20,7 +33,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "295698733625-i9j6uud6nchp45p2la9ch778hgdj131p.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

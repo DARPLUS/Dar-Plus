@@ -5,10 +5,17 @@ allprojects {
     }
 }
 
+val buildDirOverride = System.getenv("DARPLUS_BUILD_DIR")
 val newBuildDir: Directory =
-    rootProject.layout.buildDirectory
-        .dir("../../build")
-        .get()
+    if (buildDirOverride.isNullOrBlank()) {
+        rootProject.layout.buildDirectory
+            .dir("../../build")
+            .get()
+    } else {
+        rootProject.layout.dir(
+            providers.provider { rootProject.file(buildDirOverride) },
+        ).get()
+    }
 rootProject.layout.buildDirectory.value(newBuildDir)
 
 subprojects {

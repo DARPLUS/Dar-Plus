@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 
 import '../services/firebase_service.dart';
@@ -9,25 +10,25 @@ class ProServicesScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Mes services')),
+      appBar: AppBar(title: Text('pro_services_title'.tr())),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _edit(context),
         icon: const Icon(Icons.add),
-        label: const Text('Ajouter un service'),
+        label: Text('pro_services_add'.tr()),
       ),
       body: StreamBuilder<List<Map<String, dynamic>>>(
         stream: FirebaseService().streamMyServices(),
         builder: (context, snapshot) {
           if (snapshot.hasError)
             return _message(
-              'Impossible de charger les services. Vérifiez la connexion et les règles Firestore.',
+              'pro_services_load_error'.tr(),
             );
           if (!snapshot.hasData)
             return const Center(child: CircularProgressIndicator());
           final services = snapshot.data!;
           if (services.isEmpty)
             return _message(
-              'Aucun service pour le moment. Ajoutez votre première offre.',
+              'pro_services_empty'.tr(),
             );
           return ListView.separated(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 90),
@@ -41,7 +42,9 @@ class ProServicesScreen extends StatelessWidget {
                   leading: image.isEmpty
                       ? const CircleAvatar(child: Icon(Icons.handyman_outlined))
                       : CircleAvatar(backgroundImage: NetworkImage(image)),
-                  title: Text(service['name'] as String? ?? 'Service'),
+                  title: Text(
+                    service['name'] as String? ?? 'pro_services_default'.tr(),
+                  ),
                   subtitle: Text(
                     '${service['description'] ?? ''}\n${_price(service['price'])} TND',
                     maxLines: 3,
@@ -55,18 +58,18 @@ class ProServicesScreen extends StatelessWidget {
                         final confirm = await showDialog<bool>(
                           context: context,
                           builder: (dialogContext) => AlertDialog(
-                            title: const Text('Supprimer ce service ?'),
-                            content: const Text('Cette action est définitive.'),
+                            title: Text('pro_services_delete_confirm'.tr()),
+                            content: Text('pro_services_delete_warning'.tr()),
                             actions: [
                               TextButton(
                                 onPressed: () =>
                                     Navigator.pop(dialogContext, false),
-                                child: const Text('Annuler'),
+                                child: Text('cancel'.tr()),
                               ),
                               TextButton(
                                 onPressed: () =>
                                     Navigator.pop(dialogContext, true),
-                                child: const Text('Supprimer'),
+                                child: Text('pro_services_delete'.tr()),
                               ),
                             ],
                           ),
@@ -76,16 +79,22 @@ class ProServicesScreen extends StatelessWidget {
                             await FirebaseService().deleteMyService(
                               service['id'] as String,
                             );
-                            _snack(context, 'Service supprimé.');
+                            _snack(context, 'pro_services_deleted'.tr());
                           } catch (e) {
-                            _snack(context, _error(e));
+                            _snack(context, _error(context, e));
                           }
                         }
                       }
                     },
-                    itemBuilder: (_) => const [
-                      PopupMenuItem(value: 'edit', child: Text('Modifier')),
-                      PopupMenuItem(value: 'delete', child: Text('Supprimer')),
+                    itemBuilder: (_) => [
+                      PopupMenuItem(
+                        value: 'edit',
+                        child: Text('pro_services_edit'.tr()),
+                      ),
+                      PopupMenuItem(
+                        value: 'delete',
+                        child: Text('pro_services_delete'.tr()),
+                      ),
                     ],
                   ),
                 ),
@@ -107,11 +116,11 @@ class ProServicesScreen extends StatelessWidget {
   static String _price(dynamic value) =>
       value is num ? value.toStringAsFixed(value % 1 == 0 ? 0 : 2) : '0';
 
-  static String _error(Object error) {
+  static String _error(BuildContext context, Object error) {
     if (error is FirebaseException && error.code == 'permission-denied') {
-      return 'Accès Firestore refusé : configurez les règles de la collection services.';
+      return 'pro_services_permission_error'.tr();
     }
-    return 'Opération impossible : $error';
+    return 'pro_services_operation_error'.tr(args: [error.toString()]);
   }
 
   static void _snack(BuildContext context, String message) =>
@@ -139,7 +148,9 @@ class ProServicesScreen extends StatelessWidget {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: Text(
-          existing == null ? 'Nouveau service' : 'Modifier le service',
+          existing == null
+              ? 'pro_services_new'.tr()
+              : 'pro_services_edit_title'.tr(),
         ),
         content: Form(
           key: formKey,
@@ -149,37 +160,41 @@ class ProServicesScreen extends StatelessWidget {
               children: [
                 TextFormField(
                   controller: name,
-                  decoration: const InputDecoration(
-                    labelText: 'Nom du service',
+                  decoration: InputDecoration(
+                    labelText: 'pro_services_name'.tr(),
                   ),
                   validator: (v) => v == null || v.trim().isEmpty
-                      ? 'Champ obligatoire'
+                      ? 'pro_services_required'.tr()
                       : null,
                 ),
                 TextFormField(
                   controller: description,
-                  decoration: const InputDecoration(labelText: 'Description'),
+                  decoration: InputDecoration(
+                    labelText: 'pro_services_description'.tr(),
+                  ),
                   minLines: 2,
                   maxLines: 4,
                   validator: (v) => v == null || v.trim().isEmpty
-                      ? 'Champ obligatoire'
+                      ? 'pro_services_required'.tr()
                       : null,
                 ),
                 TextFormField(
                   controller: price,
-                  decoration: const InputDecoration(labelText: 'Prix (TND)'),
+                  decoration: InputDecoration(
+                    labelText: 'pro_services_price'.tr(),
+                  ),
                   keyboardType: const TextInputType.numberWithOptions(
                     decimal: true,
                   ),
                   validator: (v) =>
                       double.tryParse((v ?? '').replaceAll(',', '.')) == null
-                      ? 'Entrez un prix valide'
+                      ? 'pro_services_invalid_price'.tr()
                       : null,
                 ),
                 TextFormField(
                   controller: photo,
-                  decoration: const InputDecoration(
-                    labelText: 'URL de la photo (facultatif)',
+                  decoration: InputDecoration(
+                    labelText: 'pro_services_photo_url'.tr(),
                   ),
                   keyboardType: TextInputType.url,
                 ),
@@ -190,14 +205,14 @@ class ProServicesScreen extends StatelessWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Annuler'),
+            child: Text('cancel'.tr()),
           ),
           FilledButton(
             onPressed: () {
               if (formKey.currentState!.validate())
                 Navigator.pop(dialogContext, true);
             },
-            child: const Text('Enregistrer'),
+            child: Text('save'.tr()),
           ),
         ],
       ),
@@ -211,9 +226,9 @@ class ProServicesScreen extends StatelessWidget {
           price: double.parse(price.text.replaceAll(',', '.')),
           photoUrl: photo.text,
         );
-        if (context.mounted) _snack(context, 'Service enregistré.');
+        if (context.mounted) _snack(context, 'pro_services_saved'.tr());
       } catch (e) {
-        if (context.mounted) _snack(context, _error(e));
+        if (context.mounted) _snack(context, _error(context, e));
       }
     }
     name.dispose();

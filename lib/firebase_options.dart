@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart'
     show defaultTargetPlatform, kIsWeb, TargetPlatform;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
+import 'services/firebase_emulator_config.dart';
+
 class DefaultFirebaseOptions {
   static FirebaseOptions get currentPlatform {
     if (kIsWeb) return web;
@@ -17,14 +19,20 @@ class DefaultFirebaseOptions {
     }
   }
 
-  static String get _apiKey           => dotenv.env['FIREBASE_API_KEY']           ?? '';
-  static String get _messagingSenderId=> dotenv.env['FIREBASE_MESSAGING_SENDER_ID']?? '';
-  static String get _projectId        => dotenv.env['FIREBASE_PROJECT_ID']        ?? '';
-  static String get _storageBucket    => dotenv.env['FIREBASE_STORAGE_BUCKET']    ?? '';
-  static String get _authDomain       => dotenv.env['FIREBASE_AUTH_DOMAIN']       ?? '';
-  static String get _appIdWeb         => dotenv.env['FIREBASE_APP_ID_WEB']        ?? '';
-  static String get _appIdAndroid     => dotenv.env['FIREBASE_APP_ID_ANDROID']    ?? '';
-  static String get _appIdIos         => dotenv.env['FIREBASE_APP_ID_IOS']        ?? '';
+  static String get _apiKey => dotenv.env['FIREBASE_API_KEY'] ?? '';
+  static String get _messagingSenderId =>
+      dotenv.env['FIREBASE_MESSAGING_SENDER_ID'] ?? '';
+  static String get _projectId => FirebaseEmulatorConfig.enabled
+      ? FirebaseEmulatorConfig.projectId
+      : dotenv.env['FIREBASE_PROJECT_ID'] ?? '';
+  static String? get _storageBucket => FirebaseEmulatorConfig.enabled
+      ? null
+      : dotenv.env['FIREBASE_STORAGE_BUCKET'];
+  static String get _authDomain => dotenv.env['FIREBASE_AUTH_DOMAIN'] ?? '';
+  static String get _appIdWeb => dotenv.env['FIREBASE_APP_ID_WEB'] ?? '';
+  static String get _appIdAndroid =>
+      dotenv.env['FIREBASE_APP_ID_ANDROID'] ?? '';
+  static String get _appIdIos => dotenv.env['FIREBASE_APP_ID_IOS'] ?? '';
 
   static FirebaseOptions get web => FirebaseOptions(
     apiKey: _apiKey,

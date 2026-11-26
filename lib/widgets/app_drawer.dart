@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+
 import '../providers/theme_provider.dart';
 import '../providers/locale_provider.dart';
 import '../core/localization/app_localizations.dart';
@@ -53,7 +54,9 @@ class AppDrawer extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 26,
                   fontWeight: FontWeight.bold,
-                  color: isDark ? const Color(0xFF0F172A) : const Color(0xFF0D544E),
+                  color: isDark
+                      ? const Color(0xFF0F172A)
+                      : const Color(0xFF0D544E),
                 ),
               ),
             ),
@@ -61,11 +64,17 @@ class AppDrawer extends StatelessWidget {
               children: [
                 Text(
                   userName,
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
                 ),
                 const SizedBox(width: 8),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.white.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(10),
@@ -117,7 +126,9 @@ class AppDrawer extends StatelessWidget {
                   leading: Icon(
                     themeProvider.themeMode == ThemeMode.system
                         ? Icons.brightness_auto_rounded
-                        : (isDark ? Icons.dark_mode_rounded : Icons.light_mode_rounded),
+                        : (isDark
+                              ? Icons.dark_mode_rounded
+                              : Icons.light_mode_rounded),
                     color: isDark ? Colors.amber : const Color(0xFF0D544E),
                   ),
                   title: Text(loc.translate('theme_mode')),
@@ -125,11 +136,13 @@ class AppDrawer extends StatelessWidget {
                     themeProvider.themeMode == ThemeMode.system
                         ? loc.translate('theme_system')
                         : (themeProvider.themeMode == ThemeMode.dark
-                            ? loc.translate('theme_dark')
-                            : loc.translate('theme_light')),
+                              ? loc.translate('theme_dark')
+                              : loc.translate('theme_light')),
                     style: TextStyle(
                       fontSize: 12,
-                      color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                      color: isDark
+                          ? Colors.grey.shade400
+                          : Colors.grey.shade600,
                     ),
                   ),
                   trailing: const Icon(Icons.chevron_right_rounded),
@@ -144,9 +157,9 @@ class AppDrawer extends StatelessWidget {
                     value: localeProvider.locale.languageCode,
                     underline: const SizedBox(),
                     items: const [
-                      DropdownMenuItem(value: 'fr', child: Text('Français 🇫🇷')),
-                      DropdownMenuItem(value: 'en', child: Text('English 🇬🇧')),
-                      DropdownMenuItem(value: 'ar', child: Text('العربية 🇹🇳')),
+                      DropdownMenuItem(value: 'fr', child: Text('Français')),
+                      DropdownMenuItem(value: 'en', child: Text('English')),
+                      DropdownMenuItem(value: 'ar', child: Text('العربية')),
                     ],
                     onChanged: (lang) async {
                       if (lang != null) {
@@ -170,7 +183,8 @@ class AppDrawer extends StatelessWidget {
                       context: context,
                       applicationName: 'DAR PLUS',
                       applicationVersion: '1.0.0',
-                      applicationLegalese: '© 2026 DAR PLUS - Tous droits réservés.',
+                      applicationLegalese:
+                          '© 2026 DAR PLUS - Tous droits réservés.',
                     );
                   },
                 ),
@@ -189,7 +203,10 @@ class AppDrawer extends StatelessWidget {
               leading: const Icon(Icons.logout_rounded, color: Colors.red),
               title: Text(
                 loc.translate('logout'),
-                style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                  color: Colors.red,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               onTap: () async {
                 Navigator.pop(context);
@@ -219,12 +236,20 @@ class AppDrawer extends StatelessWidget {
       builder: (ctx) {
         final isDark = Theme.of(ctx).brightness == Brightness.dark;
         return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
           title: Row(
             children: [
               const Icon(Icons.palette_rounded, color: Color(0xFF0D544E)),
               const SizedBox(width: 10),
-              Text(loc.translate('theme_choose'), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              Text(
+                loc.translate('theme_choose'),
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ],
           ),
           content: Column(
@@ -263,7 +288,10 @@ class AppDrawer extends StatelessWidget {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: Text(loc.translate('cancel'), style: const TextStyle(color: Colors.grey)),
+              child: Text(
+                loc.translate('cancel'),
+                style: const TextStyle(color: Colors.grey),
+              ),
             ),
           ],
         );
@@ -313,7 +341,9 @@ class AppDrawer extends StatelessWidget {
                   Text(
                     title,
                     style: TextStyle(
-                      fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                      fontWeight: isSelected
+                          ? FontWeight.bold
+                          : FontWeight.w600,
                       fontSize: 14,
                       color: isDark ? Colors.white : const Color(0xFF0F172A),
                     ),
@@ -324,7 +354,9 @@ class AppDrawer extends StatelessWidget {
                       subtitle,
                       style: TextStyle(
                         fontSize: 11.5,
-                        color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                        color: isDark
+                            ? const Color(0xFF94A3B8)
+                            : const Color(0xFF64748B),
                       ),
                     ),
                   ],
@@ -332,7 +364,11 @@ class AppDrawer extends StatelessWidget {
               ),
             ),
             if (isSelected)
-              const Icon(Icons.check_circle_rounded, color: Color(0xFF0D544E), size: 20),
+              const Icon(
+                Icons.check_circle_rounded,
+                color: Color(0xFF0D544E),
+                size: 20,
+              ),
           ],
         ),
       ),

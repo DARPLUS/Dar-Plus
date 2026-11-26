@@ -2,14 +2,487 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // ══════════════════════════════════════════════════════════════════════════
-    //  RÈGLES FIRESTORE — DAR PLUS
-    //  Règle principale : tout utilisateur authentifié peut lire et écrire.
-    //  Simple, sans dépendances circulaires. Adapté au développement.
-    // ══════════════════════════════════════════════════════════════════════════
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
 
-    match /{document=**} {
-      allow read, write: if request.auth != null;
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function hasRole(role) {
+      return signedIn()
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == role;
+    }
+
+    function isAdmin() {
+      return hasRole('admin') || hasRole('super_admin');
+    }
+
+    function isSuperAdmin() {
+      return hasRole('super_admin');
+    }
+
+    function canManageCategories() {
+      return isSuperAdmin()
+        || (hasRole('admin')
+          && exists(/databases/$(database)/documents/platform_settings/global)
+          && get(/databases/$(database)/documents/platform_settings/global).data.adminCanManageCategories == true);
+    }
+
+    function booking(bookingId) {
+      return get(/databases/$(database)/documents/bookings/$(bookingId)).data;
+    }
+
+    function isManuallyBlocked(proId, dateKey, time) {
+      return exists(/databases/$(database)/documents/pro_availability/$(proId))
+        && get(/databases/$(database)/documents/pro_availability/$(proId)).data.unavailableSlots.hasAny([
+          dateKey + '_' + time
+        ]);
+    }
+
+    function canAccessBookingChat(bookingId) {
+      let chatBooking = booking(bookingId);
+      return signedIn()
+        && (chatBooking.clientId == request.auth.uid
+          || chatBooking.proId == request.auth.uid)
+        && (chatBooking.status in ['confirmee', 'terminee']
+          || (chatBooking.status == 'annulee'
+            && chatBooking.acceptedAt is timestamp));
+    }
+
+    match /pro_applications/{applicationId} {
+      allow create: if signedIn()
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.role == 'professionnel'
+        && request.resource.data.status == 'en_attente';
+      allow read: if isAdmin()
+        || (signedIn() && resource.data.email == request.auth.token.email);
+      allow update: if isAdmin()
+        && resource.data.status == 'en_attente'
+        && request.resource.data.status in ['valide', 'refuse']
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['status', 'approvedAt', 'rejectedAt', 'rejectionReason']);
+      allow delete: if isSuperAdmin();
+    }
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if (isOwner(userId)
+          && request.resource.data.role in ['client', 'professionnel']
+          && !request.resource.data.keys().hasAny(['rating', 'ratingSum', 'reviewsCount']))
+        || isSuperAdmin();
+      allow update: if isSuperAdmin()
+        || (isAdmin()
+          && resource.data.role == 'client'
+          && resource.data.isActive != false
+          && request.resource.data.role == 'client'
+          && request.resource.data.isActive == false
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['isActive', 'updatedAt']))
+        || (isAdmin()
+          && resource.data.role == 'professionnel'
+          && request.resource.data.role == 'professionnel'
+          && (
+            (request.resource.data.status == 'valide'
+              && request.resource.data.isApproved == true
+              && request.resource.data.diff(resource.data).affectedKeys()
+                .hasOnly(['isApproved', 'status', 'serviceType', 'fullName', 'approvedAt']))
+            || (request.resource.data.status == 'refuse'
+              && request.resource.data.isApproved == false
+              && request.resource.data.diff(resource.data).affectedKeys()
+                .hasOnly(['isApproved', 'status', 'rejectionReason', 'rejectedAt']))
+          ))
+        || (isOwner(userId)
+          && !request.resource.data.diff(resource.data).affectedKeys()
+            .hasAny(['role', 'isActive', 'isApproved', 'status', 'rating', 'ratingSum', 'reviewsCount']));
+      allow delete: if isSuperAdmin();
+
+      match /favorites/{favoriteId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      match /ai_conversations/{conversationId} {
+        allow read, delete: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && request.resource.data.ownerId == userId;
+        allow update: if isOwner(userId)
+          && resource.data.ownerId == userId
+          && request.resource.data.ownerId == userId;
+
+        match /messages/{messageId} {
+          allow read, delete: if isOwner(userId);
+          allow create: if isOwner(userId)
+            && request.resource.data.role in ['user', 'assistant']
+            && request.resource.data.text is string
+            && request.resource.data.text.size() <= 4000
+            && request.resource.data.recommendationIds is list;
+          allow update: if false;
+        }
+      }
+    }
+
+    match /bookings/{bookingId} {
+      allow read: if signedIn()
+        && (resource.data.clientId == request.auth.uid
+          || resource.data.proId == request.auth.uid
+          || isAdmin());
+      allow create: if signedIn()
+        && request.resource.data.clientId == request.auth.uid
+        && request.resource.data.status == 'en_attente'
+        && !request.resource.data.keys().hasAny([
+          'paymentId',
+          'paymentStatus',
+          'paidAmount',
+          'commissionAmount',
+          'professionalNetAmount',
+          'acceptedAt'
+        ]);
+      allow update: if signedIn() && (
+        (resource.data.clientId == request.auth.uid
+          && resource.data.status == 'en_attente'
+          && request.resource.data.status == 'annulee'
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['status', 'cancelledAt']))
+        || (resource.data.proId == request.auth.uid
+          && (
+            (resource.data.status == 'en_attente'
+              && request.resource.data.status in ['confirmee', 'annulee']
+              && request.resource.data.diff(resource.data).affectedKeys()
+                .hasOnly(['status', 'updatedAt', 'acceptedAt'])
+              && (
+                (request.resource.data.status == 'confirmee'
+                  && request.resource.data.acceptedAt == request.time)
+                || (request.resource.data.status == 'annulee'
+                  && !request.resource.data.diff(resource.data).affectedKeys()
+                    .hasAny(['acceptedAt']))
+              ))
+            || (resource.data.status == 'confirmee'
+              && request.resource.data.status in ['terminee', 'annulee']
+              && request.resource.data.diff(resource.data).affectedKeys()
+                .hasOnly(['status', 'updatedAt']))
+          ))
+        || (resource.data.status == 'terminee'
+          && request.resource.data.status == 'terminee'
+          && resource.data.clientId == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['clientReviewSubmitted', 'clientRating'])
+          && request.resource.data.clientReviewSubmitted == true
+          && request.resource.data.clientRating is int
+          && request.resource.data.clientRating in [1, 2, 3, 4, 5]
+          && getAfter(/databases/$(database)/documents/reviews/$(bookingId)_client).data.bookingId == bookingId
+          && getAfter(/databases/$(database)/documents/reviews/$(bookingId)_client).data.reviewerId == request.auth.uid
+          && getAfter(/databases/$(database)/documents/reviews/$(bookingId)_client).data.rating == request.resource.data.clientRating)
+        || (resource.data.status == 'terminee'
+          && request.resource.data.status == 'terminee'
+          && resource.data.proId == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['proReviewSubmitted', 'proRating'])
+          && request.resource.data.proReviewSubmitted == true
+          && request.resource.data.proRating is int
+          && request.resource.data.proRating in [1, 2, 3, 4, 5]
+          && getAfter(/databases/$(database)/documents/reviews/$(bookingId)_professionnel).data.bookingId == bookingId
+          && getAfter(/databases/$(database)/documents/reviews/$(bookingId)_professionnel).data.reviewerId == request.auth.uid
+          && getAfter(/databases/$(database)/documents/reviews/$(bookingId)_professionnel).data.rating == request.resource.data.proRating)
+      );
+      allow delete: if false;
+
+      match /messages/{messageId} {
+        allow read: if canAccessBookingChat(bookingId);
+        allow create: if canAccessBookingChat(bookingId)
+          && request.resource.data.keys().hasAll([
+            'senderId',
+            'text',
+            'createdAt'
+          ])
+          && request.resource.data.keys().hasOnly([
+            'senderId',
+            'text',
+            'createdAt'
+          ])
+          && request.resource.data.senderId == request.auth.uid
+          && request.resource.data.text is string
+          && request.resource.data.text.size() > 0
+          && request.resource.data.text.size() <= 2000
+          && request.resource.data.createdAt == request.time;
+        allow update, delete: if false;
+      }
+    }
+
+    match /payments/{paymentId} {
+      allow read: if signedIn()
+        && (resource.data.clientId == request.auth.uid
+          || resource.data.proId == request.auth.uid
+          || isAdmin());
+      allow write: if false;
+    }
+
+    match /platform_settings/{settingId} {
+      allow read: if signedIn();
+      allow write: if isSuperAdmin() && settingId == 'global';
+    }
+
+    match /platform_commissions/{commissionId} {
+      allow read: if signedIn()
+        && (isAdmin() || resource.data.professionalId == request.auth.uid);
+      allow write: if false;
+    }
+
+    match /notifications/{notificationId} {
+      allow read: if signedIn() && resource.data.recipientId == request.auth.uid;
+      allow create: if signedIn() && (
+        (request.resource.data.type == 'new_booking'
+          && booking(request.resource.data.bookingId).clientId == request.auth.uid
+          && request.resource.data.recipientId
+            == booking(request.resource.data.bookingId).proId)
+        || (request.resource.data.type == 'booking_status_update'
+          && booking(request.resource.data.bookingId).proId == request.auth.uid
+          && request.resource.data.recipientId
+            == booking(request.resource.data.bookingId).clientId)
+        || (request.resource.data.type == 'booking_review_received'
+          && request.resource.data.keys().hasAll([
+            'recipientId', 'type', 'title', 'body', 'bookingId',
+            'reviewerId', 'reviewerName', 'reviewerRole', 'rating',
+            'serviceType', 'isRead', 'createdAt'
+          ])
+          && request.resource.data.keys().hasOnly([
+            'recipientId', 'type', 'title', 'body', 'bookingId',
+            'reviewerId', 'reviewerName', 'reviewerRole', 'rating',
+            'serviceType', 'isRead', 'createdAt'
+          ])
+          && request.resource.data.reviewerId == request.auth.uid
+          && request.resource.data.reviewerRole in ['client', 'professionnel']
+          && request.resource.data.rating is int
+          && request.resource.data.rating in [1, 2, 3, 4, 5]
+          && request.resource.data.isRead == false
+          && request.resource.data.createdAt == request.time
+          && request.resource.data.title is string
+          && request.resource.data.body is string
+          && booking(request.resource.data.bookingId).status == 'terminee'
+          && (
+            (request.resource.data.reviewerRole == 'client'
+              && booking(request.resource.data.bookingId).clientId == request.auth.uid
+              && request.resource.data.recipientId
+                == booking(request.resource.data.bookingId).proId
+              && getAfter(/databases/$(database)/documents/reviews/$(request.resource.data.bookingId + '_client')).data.reviewerId == request.auth.uid
+              && getAfter(/databases/$(database)/documents/reviews/$(request.resource.data.bookingId + '_client')).data.targetId == request.resource.data.recipientId
+              && getAfter(/databases/$(database)/documents/reviews/$(request.resource.data.bookingId + '_client')).data.rating == request.resource.data.rating)
+            || (request.resource.data.reviewerRole == 'professionnel'
+              && booking(request.resource.data.bookingId).proId == request.auth.uid
+              && request.resource.data.recipientId
+                == booking(request.resource.data.bookingId).clientId
+              && getAfter(/databases/$(database)/documents/reviews/$(request.resource.data.bookingId + '_professionnel')).data.reviewerId == request.auth.uid
+              && getAfter(/databases/$(database)/documents/reviews/$(request.resource.data.bookingId + '_professionnel')).data.targetId == request.resource.data.recipientId
+              && getAfter(/databases/$(database)/documents/reviews/$(request.resource.data.bookingId + '_professionnel')).data.rating == request.resource.data.rating)
+          ))
+        || (request.resource.data.type in [
+            'pro_application_approved',
+            'pro_application_rejected'
+          ] && isAdmin())
+      );
+      allow update: if signedIn()
+        && resource.data.recipientId == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['isRead']);
+      allow delete: if false;
+    }
+
+    // Réservations de créneaux minimales : lisibles par les clients pour
+    // afficher les heures prises sans exposer les données privées des bookings.
+    match /pro_availability/{proId} {
+      // Ces métadonnées ne contiennent que les horaires et plages bloquées.
+      // Les clients connectés les lisent pour ne proposer que les heures libres.
+      allow read: if signedIn();
+      allow create, update: if isOwner(proId)
+        && request.resource.data.keys().hasAll([
+          'workStartMinutes', 'workEndMinutes', 'unavailableSlots', 'updatedAt'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'workStartMinutes', 'workEndMinutes', 'unavailableSlots', 'updatedAt'
+        ])
+        && request.resource.data.workStartMinutes is int
+        && request.resource.data.workEndMinutes is int
+        && request.resource.data.workStartMinutes >= 0
+        && request.resource.data.workEndMinutes <= 1440
+        && request.resource.data.workStartMinutes < request.resource.data.workEndMinutes
+        && request.resource.data.unavailableSlots is list
+        && request.resource.data.unavailableSlots.size() <= 3000
+        && request.resource.data.updatedAt == request.time;
+      allow delete: if false;
+
+      match /slots/{slotId} {
+        allow read: if signedIn();
+        allow create: if signedIn()
+          && request.resource.data.keys().hasOnly([
+            'proId', 'bookingId', 'clientId', 'dateKey', 'time', 'status', 'createdAt'
+          ])
+          && request.resource.data.proId == proId
+          && request.resource.data.clientId == request.auth.uid
+          && request.resource.data.dateKey is string
+          && request.resource.data.time is string
+          && request.resource.data.status == 'reserved'
+          && request.resource.data.createdAt == request.time
+          && !isManuallyBlocked(
+            proId,
+            request.resource.data.dateKey,
+            request.resource.data.time
+          )
+          && getAfter(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId)).data.proId == proId
+          && getAfter(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId)).data.clientId == request.auth.uid
+          && getAfter(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId)).data.scheduledDateKey == request.resource.data.dateKey
+          && getAfter(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId)).data.scheduledTime == request.resource.data.time;
+        allow delete: if signedIn()
+          && (resource.data.clientId == request.auth.uid
+            || resource.data.proId == request.auth.uid)
+          && getAfter(/databases/$(database)/documents/bookings/$(resource.data.bookingId)).data.status == 'annulee';
+        allow update: if false;
+      }
+    }
+
+    // Signalisation des appels audio (WebRTC) : seuls les deux participants
+    // peuvent lire et mettre à jour l'appel.
+    match /calls/{callId} {
+      allow read: if signedIn()
+        && (resource.data.callerId == request.auth.uid
+          || resource.data.calleeId == request.auth.uid);
+      allow create: if signedIn()
+        && request.resource.data.callerId == request.auth.uid
+        && request.resource.data.status == 'ringing';
+      allow update: if signedIn()
+        && (resource.data.callerId == request.auth.uid
+          || resource.data.calleeId == request.auth.uid);
+      allow delete: if false;
+    }
+
+    match /_paymentRequests/{requestId} {
+      allow read, write: if false;
+    }
+
+    match /reports/{reportId} {
+      allow read: if isAdmin()
+        || (signedIn() && resource.data.reporterId == request.auth.uid);
+      allow create: if signedIn()
+        && request.resource.data.reporterId == request.auth.uid
+        && request.resource.data.status == 'Ouvert'
+        && request.resource.data.createdAt == request.time;
+      allow update: if isAdmin()
+        && resource.data.status != 'Résolu'
+        && request.resource.data.status == 'Résolu'
+        && request.resource.data.resolvedBy == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['status', 'resolvedAt', 'resolvedBy']);
+      allow delete: if isSuperAdmin();
+    }
+
+    match /reviews/{reviewId} {
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && request.resource.data.keys().hasAll([
+          'bookingId', 'reviewerId', 'reviewerName', 'reviewerRole',
+          'targetId', 'targetRole', 'proId', 'rating', 'comment',
+          'serviceType', 'createdAt'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'bookingId', 'reviewerId', 'reviewerName', 'reviewerRole',
+          'targetId', 'targetRole', 'proId', 'rating', 'comment',
+          'serviceType', 'createdAt', 'categoryRatings', 'tags'
+        ])
+        && request.resource.data.reviewerId == request.auth.uid
+        && request.resource.data.rating is int
+        && request.resource.data.rating in [1, 2, 3, 4, 5]
+        && request.resource.data.comment is string
+        && request.resource.data.comment.size() <= 500
+        && (!request.resource.data.keys().hasAny(['categoryRatings'])
+          || (request.resource.data.categoryRatings is map
+            && request.resource.data.categoryRatings.keys().hasOnly([
+              'punctuality', 'quality', 'price', 'communication'
+            ])
+            && (!request.resource.data.categoryRatings.keys().hasAny(['punctuality'])
+              || request.resource.data.categoryRatings.punctuality in [1, 2, 3, 4, 5])
+            && (!request.resource.data.categoryRatings.keys().hasAny(['quality'])
+              || request.resource.data.categoryRatings.quality in [1, 2, 3, 4, 5])
+            && (!request.resource.data.categoryRatings.keys().hasAny(['price'])
+              || request.resource.data.categoryRatings.price in [1, 2, 3, 4, 5])
+            && (!request.resource.data.categoryRatings.keys().hasAny(['communication'])
+              || request.resource.data.categoryRatings.communication in [1, 2, 3, 4, 5])))
+        && (!request.resource.data.keys().hasAny(['tags'])
+          || (request.resource.data.tags is list
+            && request.resource.data.tags.size() <= 5
+            && request.resource.data.tags.hasOnly([
+              'punctual', 'professional', 'clean', 'fast', 'fair_price'
+            ])))
+        && request.resource.data.reviewerName is string
+        && request.resource.data.reviewerName.size() <= 100
+        && request.resource.data.createdAt == request.time
+        && exists(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId))
+        && get(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId)).data.status == 'terminee'
+        && (
+          (get(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId)).data.clientId == request.auth.uid
+            && reviewId == request.resource.data.bookingId + '_client'
+            && request.resource.data.reviewerRole == 'client'
+            && request.resource.data.targetId == get(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId)).data.proId
+            && request.resource.data.targetRole == 'professionnel'
+            && request.resource.data.proId == get(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId)).data.proId
+            && getAfter(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId)).data.clientReviewSubmitted == true
+            && getAfter(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId)).data.clientRating == request.resource.data.rating)
+          || (get(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId)).data.proId == request.auth.uid
+            && reviewId == request.resource.data.bookingId + '_professionnel'
+            && request.resource.data.reviewerRole == 'professionnel'
+            && request.resource.data.targetId == get(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId)).data.clientId
+            && request.resource.data.targetRole == 'client'
+            && request.resource.data.proId == request.auth.uid
+            && getAfter(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId)).data.proReviewSubmitted == true
+            && getAfter(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId)).data.proRating == request.resource.data.rating)
+        );
+      allow update, delete: if false;
+    }
+
+    match /promotions/{promotionId} {
+      allow read: if signedIn();
+      allow create: if isAdmin()
+        && request.resource.data.code is string
+        && request.resource.data.code.size() > 0
+        && request.resource.data.discount is number
+        && request.resource.data.discount > 0
+        && request.resource.data.type in ['percent', 'fixed'];
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /categories/{categoryId} {
+      allow read: if signedIn();
+      allow create: if canManageCategories()
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.isActive is bool;
+      allow update: if canManageCategories()
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.isActive is bool
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['name', 'pros', 'isActive', 'updatedAt']);
+      allow delete: if canManageCategories();
+    }
+
+    // Keep authenticated access for unrelated top-level collections. Financial
+    // collections above are excluded so this catch-all cannot reopen their writes.
+    match /{collection}/{document=**} {
+      allow read, write: if signedIn()
+        && !(collection in [
+          'users',
+          'pro_applications',
+          'bookings',
+          'payments',
+          'platform_settings',
+          'platform_commissions',
+          'notifications',
+          'calls',
+          '_paymentRequests',
+          'reports',
+          'reviews',
+          'promotions',
+          'categories'
+        ]);
     }
   }
 }

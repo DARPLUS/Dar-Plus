@@ -37,6 +37,7 @@ dependencies:
   firebase_core: ^4.15.0
   firebase_auth: ^6.7.0
   cloud_firestore: ^6.10.0
+  cloud_functions: ^6.3.0
   firebase_storage: ^13.2.0
   image_picker: ^1.2.4
   http: ^1.6.0
@@ -51,13 +52,25 @@ dependencies:
 
   # Geolocation
   geolocator: ^13.0.2
-  geocoding: ^3.0.0
+  geocoding: ^4.0.0
 
   # Localization & Internationalization
   flutter_localizations:
     sdk: flutter
   intl: ^0.20.2
   easy_localization: ^3.0.8
+  google_mobile_ads: ^9.2.0
+  google_sign_in: ^7.2.0
+  firebase_ai: ^4.0.0
+  firebase_app_check: ^0.4.9
+  flutter_map: ^8.3.2
+  latlong2: ^0.10.1
+  flutter_webrtc: ^1.6.3
+  fl_chart: ^0.69.0
+
+  # Notifications push & locales
+  firebase_messaging: ^16.7.1
+  flutter_local_notifications: ^18.0.1
 
 dev_dependencies:
   flutter_test:

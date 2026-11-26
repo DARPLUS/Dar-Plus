@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:easy_localization/easy_localization.dart';
+
 import '../services/firebase_service.dart';
 import '../theme/app_theme.dart';
 import '../core/localization/app_localizations.dart';
@@ -116,8 +118,7 @@ class _CatalogSearchScreenState extends State<CatalogSearchScreen> {
                 decoration: InputDecoration(
                   hintText: loc.translate('search_hint'),
                   hintStyle: TextStyle(
-                    color:
-                        isDark ? Colors.grey.shade400 : Colors.grey.shade500,
+                    color: isDark ? Colors.grey.shade400 : Colors.grey.shade500,
                     fontSize: 14,
                   ),
                   prefixIcon: const Icon(
@@ -126,8 +127,7 @@ class _CatalogSearchScreenState extends State<CatalogSearchScreen> {
                   ),
                   suffixIcon: _searchQuery.isNotEmpty
                       ? IconButton(
-                          icon:
-                              const Icon(Icons.clear_rounded, size: 18),
+                          icon: const Icon(Icons.clear_rounded, size: 18),
                           onPressed: () {
                             _searchController.clear();
                             setState(() => _searchQuery = '');
@@ -135,8 +135,7 @@ class _CatalogSearchScreenState extends State<CatalogSearchScreen> {
                         )
                       : null,
                   border: InputBorder.none,
-                  contentPadding:
-                      const EdgeInsets.symmetric(vertical: 14),
+                  contentPadding: const EdgeInsets.symmetric(vertical: 14),
                 ),
               ),
             ),
@@ -163,36 +162,39 @@ class _CatalogSearchScreenState extends State<CatalogSearchScreen> {
                 height: 48,
                 child: ListView.separated(
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 16, vertical: 4),
+                    horizontal: 16,
+                    vertical: 4,
+                  ),
                   scrollDirection: Axis.horizontal,
                   itemCount: cats.length,
-                  separatorBuilder: (_, _) =>
-                      const SizedBox(width: 8),
+                  separatorBuilder: (_, _) => const SizedBox(width: 8),
                   itemBuilder: (context, index) {
                     final cat = cats[index];
                     final catName = cat['name'] as String;
-                    final isSelected = _selectedCategory.toLowerCase() ==
+                    final isSelected =
+                        _selectedCategory.toLowerCase() ==
                         catName.toLowerCase();
                     return GestureDetector(
-                      onTap: () =>
-                          setState(() => _selectedCategory = catName),
+                      onTap: () => setState(() => _selectedCategory = catName),
                       child: AnimatedContainer(
                         duration: const Duration(milliseconds: 200),
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 8),
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
                         decoration: BoxDecoration(
                           color: isSelected
                               ? const Color(0xFF0D544E)
                               : (isDark
-                                  ? const Color(0xFF1E293B)
-                                  : Colors.white),
+                                    ? const Color(0xFF1E293B)
+                                    : Colors.white),
                           borderRadius: BorderRadius.circular(20),
                           border: Border.all(
                             color: isSelected
                                 ? const Color(0xFF0D544E)
                                 : (isDark
-                                    ? Colors.transparent
-                                    : Colors.grey.shade300),
+                                      ? Colors.transparent
+                                      : Colors.grey.shade300),
                           ),
                         ),
                         alignment: Alignment.center,
@@ -206,8 +208,8 @@ class _CatalogSearchScreenState extends State<CatalogSearchScreen> {
                             color: isSelected
                                 ? Colors.white
                                 : (isDark
-                                    ? Colors.grey.shade300
-                                    : AppTheme.titleColor),
+                                      ? Colors.grey.shade300
+                                      : AppTheme.titleColor),
                           ),
                         ),
                       ),
@@ -222,8 +224,7 @@ class _CatalogSearchScreenState extends State<CatalogSearchScreen> {
 
           // 3. Results Counter (temps réel)
           Padding(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
             child: StreamBuilder<List<Map<String, dynamic>>>(
               stream: FirebaseService().streamPros(
                 category: _selectedCategory,
@@ -235,9 +236,11 @@ class _CatalogSearchScreenState extends State<CatalogSearchScreen> {
                 final allPros = snapshot.data ?? [];
                 final filtered = _minRating > 0
                     ? allPros
-                        .where((p) =>
-                            (p['rating'] as num).toDouble() >= _minRating)
-                        .toList()
+                          .where(
+                            (p) =>
+                                (p['rating'] as num).toDouble() >= _minRating,
+                          )
+                          .toList()
                     : allPros;
                 final count = filtered.length;
                 return Row(
@@ -256,7 +259,9 @@ class _CatalogSearchScreenState extends State<CatalogSearchScreen> {
                     if (_onlyAvailable || _minRating > 0)
                       Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 2),
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
                         decoration: BoxDecoration(
                           color: const Color(0xFF10B981)
                               .withValues(alpha: 0.15),
@@ -289,8 +294,7 @@ class _CatalogSearchScreenState extends State<CatalogSearchScreen> {
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(
-                    child: CircularProgressIndicator(
-                        color: Color(0xFF0D544E)),
+                    child: CircularProgressIndicator(color: Color(0xFF0D544E)),
                   );
                 }
 
@@ -299,8 +303,9 @@ class _CatalogSearchScreenState extends State<CatalogSearchScreen> {
                 // Filtre par note minimale
                 if (_minRating > 0) {
                   pros = pros
-                      .where((p) =>
-                          (p['rating'] as num).toDouble() >= _minRating)
+                      .where(
+                        (p) => (p['rating'] as num).toDouble() >= _minRating,
+                      )
                       .toList();
                 }
 
@@ -315,7 +320,7 @@ class _CatalogSearchScreenState extends State<CatalogSearchScreen> {
                             color: isDark
                                 ? const Color(0xFF1E293B)
                                 : const Color(0xFFD7F3EA)
-                                    .withValues(alpha: 0.5),
+                                      .withValues(alpha: 0.5),
                             shape: BoxShape.circle,
                           ),
                           child: const Icon(
@@ -330,9 +335,7 @@ class _CatalogSearchScreenState extends State<CatalogSearchScreen> {
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
-                            color: isDark
-                                ? Colors.white
-                                : AppTheme.titleColor,
+                            color: isDark ? Colors.white : AppTheme.titleColor,
                           ),
                         ),
                         const SizedBox(height: 8),
@@ -352,10 +355,11 @@ class _CatalogSearchScreenState extends State<CatalogSearchScreen> {
 
                 return ListView.separated(
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 16, vertical: 8),
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
                   itemCount: pros.length,
-                  separatorBuilder: (_, _) =>
-                      const SizedBox(height: 12),
+                  separatorBuilder: (_, _) => const SizedBox(height: 12),
                   itemBuilder: (context, index) =>
                       _buildProCard(context, pros[index], isDark),
                 );
@@ -412,7 +416,7 @@ class _CatalogSearchScreenState extends State<CatalogSearchScreen> {
                   name: pro['name'] ?? '',
                   photoBase64: photoBase64,
                   borderRadius: 16,
-                  showVerifiedBadge: true,
+                  showVerifiedBadge: pro['demoProfile'] != true,
                 ),
               ),
               const SizedBox(width: 14),
@@ -450,7 +454,9 @@ class _CatalogSearchScreenState extends State<CatalogSearchScreen> {
                       children: [
                         Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 2),
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
                           decoration: BoxDecoration(
                             color: const Color(0xFF0D544E)
                                 .withValues(alpha: 0.1),
@@ -475,7 +481,9 @@ class _CatalogSearchScreenState extends State<CatalogSearchScreen> {
                         Text(
                           pro['location'] ?? '',
                           style: TextStyle(
-                              fontSize: 12, color: Colors.grey.shade500),
+                            fontSize: 12,
+                            color: Colors.grey.shade500,
+                          ),
                         ),
                       ],
                     ),
@@ -493,25 +501,27 @@ class _CatalogSearchScreenState extends State<CatalogSearchScreen> {
                           style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.bold,
-                            color: isDark
-                                ? Colors.white
-                                : AppTheme.titleColor,
+                            color: isDark ? Colors.white : AppTheme.titleColor,
                           ),
                         ),
                         const SizedBox(width: 3),
                         Text(
                           '(${pro['reviewsCount']} avis)',
                           style: TextStyle(
-                              fontSize: 11, color: Colors.grey.shade500),
+                            fontSize: 11,
+                            color: Colors.grey.shade500,
+                          ),
                         ),
                         const Spacer(),
                         Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 2),
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
                           decoration: BoxDecoration(
                             color: (pro['available'] == true)
                                 ? const Color(0xFF10B981)
-                                    .withValues(alpha: 0.12)
+                                      .withValues(alpha: 0.12)
                                 : Colors.grey.withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(8),
                           ),
@@ -548,17 +558,16 @@ class _CatalogSearchScreenState extends State<CatalogSearchScreen> {
       ),
       builder: (ctx) {
         final loc = AppLocalizations.of(context);
-        final isDarkModal =
-            Theme.of(context).brightness == Brightness.dark;
+        final isDarkModal = Theme.of(context).brightness == Brightness.dark;
         return StatefulBuilder(
           builder: (context, setModalState) {
             return Container(
-              color: isDarkModal
-                  ? const Color(0xFF1E293B)
-                  : Colors.white,
+              color: isDarkModal ? const Color(0xFF1E293B) : Colors.white,
               child: Padding(
                 padding: const EdgeInsets.symmetric(
-                    horizontal: 20, vertical: 24),
+                  horizontal: 20,
+                  vertical: 24,
+                ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -568,9 +577,7 @@ class _CatalogSearchScreenState extends State<CatalogSearchScreen> {
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
-                        color: isDarkModal
-                            ? Colors.white
-                            : AppTheme.titleColor,
+                        color: isDarkModal ? Colors.white : AppTheme.titleColor,
                       ),
                     ),
                     const SizedBox(height: 16),
@@ -578,9 +585,7 @@ class _CatalogSearchScreenState extends State<CatalogSearchScreen> {
                       loc.translate('sort_by'),
                       style: TextStyle(
                         fontWeight: FontWeight.w600,
-                        color: isDarkModal
-                            ? Colors.white
-                            : AppTheme.titleColor,
+                        color: isDarkModal ? Colors.white : AppTheme.titleColor,
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -599,18 +604,15 @@ class _CatalogSearchScreenState extends State<CatalogSearchScreen> {
                           label: Text(loc.translate('sort_price_asc')),
                           selected: _sortBy == 'price_asc',
                           onSelected: (_) {
-                            setModalState(
-                                () => _sortBy = 'price_asc');
+                            setModalState(() => _sortBy = 'price_asc');
                             setState(() {});
                           },
                         ),
                         ChoiceChip(
-                          label:
-                              Text(loc.translate('sort_price_desc')),
+                          label: Text(loc.translate('sort_price_desc')),
                           selected: _sortBy == 'price_desc',
                           onSelected: (_) {
-                            setModalState(
-                                () => _sortBy = 'price_desc');
+                            setModalState(() => _sortBy = 'price_desc');
                             setState(() {});
                           },
                         ),
@@ -618,12 +620,10 @@ class _CatalogSearchScreenState extends State<CatalogSearchScreen> {
                     ),
                     const SizedBox(height: 16),
                     Text(
-                      'Note minimale',
+                      'search_min_rating'.tr(),
                       style: TextStyle(
                         fontWeight: FontWeight.w600,
-                        color: isDarkModal
-                            ? Colors.white
-                            : AppTheme.titleColor,
+                        color: isDarkModal ? Colors.white : AppTheme.titleColor,
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -631,7 +631,7 @@ class _CatalogSearchScreenState extends State<CatalogSearchScreen> {
                       spacing: 8,
                       children: [
                         ChoiceChip(
-                          label: const Text('Toutes'),
+                          label: Text('search_all_ratings'.tr()),
                           selected: _minRating == 0.0,
                           onSelected: (_) {
                             setModalState(() => _minRating = 0.0);
@@ -639,7 +639,7 @@ class _CatalogSearchScreenState extends State<CatalogSearchScreen> {
                           },
                         ),
                         ChoiceChip(
-                          label: const Text('3.0+'),
+                          label: Text('search_rating_3'.tr()),
                           selected: _minRating == 3.0,
                           onSelected: (_) {
                             setModalState(() => _minRating = 3.0);
@@ -647,7 +647,7 @@ class _CatalogSearchScreenState extends State<CatalogSearchScreen> {
                           },
                         ),
                         ChoiceChip(
-                          label: const Text('4.0+'),
+                          label: Text('search_rating_4'.tr()),
                           selected: _minRating == 4.0,
                           onSelected: (_) {
                             setModalState(() => _minRating = 4.0);
@@ -655,7 +655,7 @@ class _CatalogSearchScreenState extends State<CatalogSearchScreen> {
                           },
                         ),
                         ChoiceChip(
-                          label: const Text('4.5+'),
+                          label: Text('search_rating_45'.tr()),
                           selected: _minRating == 4.5,
                           onSelected: (_) {
                             setModalState(() => _minRating = 4.5);

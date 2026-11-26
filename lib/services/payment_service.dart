@@ -1,9 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
+
 import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:http/http.dart' as http;
+
 import '../models/payment_model.dart';
 import 'firebase_service.dart';
 
@@ -53,9 +57,36 @@ class PaymentService {
     required double baseAmount,
     double feeAmount = 2.500, // Frais de service standards DAR PLUS (en DT)
     double discountAmount = 0.0,
-    required String paymentMethod, // 'carte_bancaire', 'flouci', 'konnect', 'cash'
+    required String
+    paymentMethod, // 'carte_bancaire', 'flouci', 'konnect', 'cash'
   }) async {
     try {
+      if (_isFirebaseReady) {
+        final user = FirebaseAuth.instance.currentUser;
+        if (user == null) {
+          throw StateError('Connectez-vous pour effectuer un paiement.');
+        }
+        final response = await FirebaseFunctions.instance
+            .httpsCallable('createPaymentSession')
+            .call({
+              'bookingId': bookingId,
+              'paymentMethod': paymentMethod,
+              'requestId':
+                  '${DateTime.now().microsecondsSinceEpoch}_${Random.secure().nextInt(0x7fffffff)}',
+            });
+        final data = Map<String, dynamic>.from(response.data as Map);
+        final serverPaymentId = data['paymentId']?.toString();
+        if (serverPaymentId == null || serverPaymentId.isEmpty) {
+          throw StateError(
+            'Le serveur n’a pas retourné la référence du paiement.',
+          );
+        }
+        return PaymentCheckoutInitResult(
+          success: true,
+          paymentId: serverPaymentId,
+        );
+      }
+
       User? user;
       if (_isFirebaseReady) {
         try {
@@ -74,8 +105,12 @@ class PaymentService {
         }
       }
 
-      final totalAmount = (baseAmount + feeAmount - discountAmount).clamp(0.0, 999999.0);
-      final paymentId = 'pay_${DateTime.now().millisecondsSinceEpoch}_${clientId.substring(0, clientId.length > 5 ? 5 : clientId.length)}';
+      final totalAmount = (baseAmount + feeAmount - discountAmount).clamp(
+        0.0,
+        999999.0,
+      );
+      final paymentId =
+          'pay_${DateTime.now().millisecondsSinceEpoch}_${clientId.substring(0, clientId.length > 5 ? 5 : clientId.length)}';
       final transactionRef = 'TXN-DAR-${DateTime.now().millisecondsSinceEpoch}';
 
       // 1.1 Si une API backend externe est configurée, on l'appelle avec le token Firebase JWT
@@ -115,7 +150,8 @@ class PaymentService {
         } else {
           return PaymentCheckoutInitResult(
             success: false,
-            errorMessage: 'Échec de la création de session serveur (${response.statusCode})',
+            errorMessage:
+                'Échec de la création de session serveur (${response.statusCode})',
           );
         }
       }
@@ -144,25 +180,7 @@ class PaymentService {
 
       _localPaymentsCache[paymentId] = newPayment;
 
-      if (_isFirebaseReady) {
-        await FirebaseFirestore.instance
-            .collection('payments')
-            .doc(paymentId)
-            .set(newPayment.toMap());
-
-        // Journal de sécurité
-        await FirebaseService().logSecurityEvent(
-          action: 'INITIATE_PAYMENT',
-          actorEmail: clientEmail.isNotEmpty ? clientEmail : 'Client',
-          target: proName,
-          details: 'Session de paiement $paymentId initiée pour $serviceType ($totalAmount DT)',
-        );
-      }
-
-      return PaymentCheckoutInitResult(
-        success: true,
-        paymentId: paymentId,
-      );
+      return PaymentCheckoutInitResult(success: true, paymentId: paymentId);
     } catch (e) {
       debugPrint('Erreur createCheckoutSession: $e');
       return PaymentCheckoutInitResult(
@@ -183,24 +201,30 @@ class PaymentService {
           .doc(paymentId)
           .snapshots()
           .map((snapshot) {
-        if (!snapshot.exists || snapshot.data() == null) {
-          return _localPaymentsCache[paymentId];
-        }
-        final model = PaymentModel.fromMap(snapshot.data()!, snapshot.id);
-        _localPaymentsCache[paymentId] = model;
-        return model;
-      });
+            if (!snapshot.exists || snapshot.data() == null) {
+              return _localPaymentsCache[paymentId];
+            }
+            final model = PaymentModel.fromMap(snapshot.data()!, snapshot.id);
+            _localPaymentsCache[paymentId] = model;
+            return model;
+          });
     }
 
     // Fallback stream local
-    return Stream.periodic(const Duration(seconds: 1), (_) => _localPaymentsCache[paymentId]);
+    return Stream.periodic(
+      const Duration(seconds: 1),
+      (_) => _localPaymentsCache[paymentId],
+    );
   }
 
   /// Récupérer les détails d'un paiement ponctuellement
   Future<PaymentModel?> getPayment(String paymentId) async {
     try {
       if (_isFirebaseReady) {
-        final doc = await FirebaseFirestore.instance.collection('payments').doc(paymentId).get();
+        final doc = await FirebaseFirestore.instance
+            .collection('payments')
+            .doc(paymentId)
+            .get();
         if (doc.exists && doc.data() != null) {
           final model = PaymentModel.fromMap(doc.data()!, doc.id);
           _localPaymentsCache[paymentId] = model;
@@ -232,14 +256,14 @@ class PaymentService {
           .where('clientId', isEqualTo: clientId)
           .snapshots()
           .map((snapshot) {
-        final list = snapshot.docs
-            .map((doc) => PaymentModel.fromMap(doc.data(), doc.id))
-            .toList();
+            final list = snapshot.docs
+                .map((doc) => PaymentModel.fromMap(doc.data(), doc.id))
+                .toList();
 
-        // Tri par date décroissante
-        list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-        return list;
-      });
+            // Tri par date décroissante
+            list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+            return list;
+          });
     }
 
     // Fallback mémoire locale
@@ -270,14 +294,20 @@ class PaymentService {
         proName: current.proName,
         serviceType: current.serviceType,
         baseAmount: current.baseAmount,
+        grossAmount: current.grossAmount,
         feeAmount: current.feeAmount,
         discountAmount: current.discountAmount,
         totalAmount: current.totalAmount,
+        commissionPercentage: current.commissionPercentage,
+        commissionAmount: current.commissionAmount,
+        professionalNetAmount: current.professionalNetAmount,
         currency: current.currency,
         status: PaymentStatus.cancelled,
         paymentMethod: current.paymentMethod,
+        paymentProvider: current.paymentProvider,
         transactionRef: current.transactionRef,
         failureReason: 'Annulé par l\'utilisateur',
+        isSandbox: current.isSandbox,
         createdAt: current.createdAt,
         updatedAt: DateTime.now(),
       );
@@ -285,19 +315,16 @@ class PaymentService {
       _localPaymentsCache[paymentId] = updated;
 
       if (_isFirebaseReady) {
-        await FirebaseFirestore.instance
-            .collection('payments')
-            .doc(paymentId)
-            .update({
-          'status': PaymentStatus.cancelled.code,
-          'failureReason': 'Annulé par l\'utilisateur',
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
+        await FirebaseFunctions.instance
+            .httpsCallable('cancelSandboxPayment')
+            .call({'paymentId': paymentId});
 
         // Journal de sécurité
         await FirebaseService().logSecurityEvent(
           action: 'CANCEL_PAYMENT',
-          actorEmail: current.clientEmail.isNotEmpty ? current.clientEmail : 'Client',
+          actorEmail: current.clientEmail.isNotEmpty
+              ? current.clientEmail
+              : 'Client',
           target: current.proName,
           details: 'Session de paiement $paymentId annulée par le client',
         );
@@ -314,14 +341,29 @@ class PaymentService {
   /// Permet en environnement de test / dev de simuler la réponse d'un webhook serveur
   /// après un délai d'attente réseau réaliste (ex: 3s).
   /// À désactiver en production où seul le serveur tiers (webhook) met à jour Firestore.
-  Future<void> simulateServerWebhookResponse(String paymentId, {required bool shouldSucceed, String? failReason}) async {
+  Future<void> simulateServerWebhookResponse(
+    String paymentId, {
+    required bool shouldSucceed,
+    String? failReason,
+  }) async {
+    if (_isFirebaseReady) {
+      throw StateError(
+        'Un paiement Firebase doit être confirmé par le serveur de paiement.',
+      );
+    }
+
     await Future.delayed(const Duration(seconds: 3));
 
     final current = await getPayment(paymentId);
     if (current == null || current.status != PaymentStatus.pending) return;
 
-    final newStatus = shouldSucceed ? PaymentStatus.success : PaymentStatus.failed;
-    final reason = shouldSucceed ? null : (failReason ?? 'Solde insuffisant ou transaction refusée par la banque.');
+    final newStatus = shouldSucceed
+        ? PaymentStatus.success
+        : PaymentStatus.failed;
+    final reason = shouldSucceed
+        ? null
+        : (failReason ??
+              'Solde insuffisant ou transaction refusée par la banque.');
 
     final updated = PaymentModel(
       id: current.id,
@@ -333,46 +375,25 @@ class PaymentService {
       proName: current.proName,
       serviceType: current.serviceType,
       baseAmount: current.baseAmount,
+      grossAmount: current.grossAmount,
       feeAmount: current.feeAmount,
       discountAmount: current.discountAmount,
       totalAmount: current.totalAmount,
+      commissionPercentage: current.commissionPercentage,
+      commissionAmount: current.commissionAmount,
+      professionalNetAmount: current.professionalNetAmount,
       currency: current.currency,
       status: newStatus,
       paymentMethod: current.paymentMethod,
+      paymentProvider: current.paymentProvider,
       transactionRef: current.transactionRef,
       failureReason: reason,
+      isSandbox: current.isSandbox,
       createdAt: current.createdAt,
       updatedAt: DateTime.now(),
     );
 
     _localPaymentsCache[paymentId] = updated;
-
-    if (_isFirebaseReady) {
-      await FirebaseFirestore.instance.collection('payments').doc(paymentId).update({
-        'status': newStatus.code,
-        'failureReason': reason,
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-
-      // Si le paiement a réussi, synchroniser la réservation correspondante dans 'bookings'
-      if (shouldSucceed && current.bookingId.isNotEmpty) {
-        try {
-          await FirebaseFirestore.instance.collection('bookings').doc(current.bookingId).update({
-            'paymentStatus': 'paye',
-            'paymentId': paymentId,
-            'paidAmount': current.totalAmount,
-            'updatedAt': FieldValue.serverTimestamp(),
-          });
-        } catch (_) {}
-      }
-
-      await FirebaseService().logSecurityEvent(
-        action: shouldSucceed ? 'PAYMENT_SUCCESS_SERVER' : 'PAYMENT_FAILED_SERVER',
-        actorEmail: 'SERVER_GATEWAY',
-        target: current.clientEmail,
-        details: 'Serveur: Paiement $paymentId ${shouldSucceed ? "validé avec succès" : "refusé ($reason)"}',
-      );
-    }
   }
 
   // ================= 6. PARCOURS COMPLET SANDBOX (STRIPE TEST / KONNECT SANDBOX) =================
@@ -391,40 +412,120 @@ class PaymentService {
     required double feeAmount,
     required double discountAmount,
     required double totalAmount,
-    required String gateway, // 'stripe_test', 'konnect_sandbox', 'flouci_sandbox'
+    required String
+    gateway, // 'stripe_test', 'konnect_sandbox', 'flouci_sandbox'
     required String paymentMethod, // 'carte_bancaire', 'konnect', 'cash'
     required bool isSubscription,
-    required bool shouldSucceed,
+    required String requestId,
+    String? promoCode,
     String? testCardNumber,
-    String? failReason,
   }) async {
-    // 1. Simuler la latence réseau bancaire réaliste (1200ms)
-    await Future.delayed(const Duration(milliseconds: 1200));
-
     User? user;
     if (_isFirebaseReady) {
-      try {
-        user = FirebaseAuth.instance.currentUser;
-      } catch (_) {}
-    }
-    final clientId = user?.uid ?? 'client_anon';
-    final clientEmail = user?.email ?? '';
+      user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        throw StateError('Connectez-vous pour effectuer un paiement.');
+      }
 
-    String clientName = 'Client';
-    if (_isFirebaseReady) {
-      final userData = await FirebaseService().getCurrentUserData();
-      if (userData != null && userData['fullName'] != null) {
-        clientName = userData['fullName'] as String;
+      try {
+        final response = await FirebaseFunctions.instance
+            .httpsCallable('processSandboxPayment')
+            .call({
+              'bookingId': bookingId,
+              'gateway': gateway,
+              'paymentMethod': paymentMethod,
+              'isSubscription': isSubscription,
+              'requestId': requestId,
+              'promoCode': promoCode,
+              'testCardNumber': testCardNumber ?? '',
+            });
+        final responseData = Map<String, dynamic>.from(response.data as Map);
+        final paymentId = responseData['paymentId']?.toString();
+        if (paymentId == null || paymentId.isEmpty) {
+          throw StateError(
+            'Le serveur n’a pas retourné la référence du paiement.',
+          );
+        }
+        final payment = await getPayment(paymentId);
+        if (payment == null) {
+          throw StateError('Le paiement créé par le serveur est introuvable.');
+        }
+        return payment;
+      } on FirebaseFunctionsException catch (error) {
+        if (!kDebugMode || error.code != 'not-found') rethrow;
+        debugPrint(
+          'Cloud Function processSandboxPayment absente; simulation locale non persistée.',
+        );
+        return _simulateLocalSandboxPayment(
+          bookingId: bookingId,
+          proId: proId,
+          proName: proName,
+          serviceType: serviceType,
+          baseAmount: baseAmount,
+          feeAmount: feeAmount,
+          discountAmount: discountAmount,
+          totalAmount: totalAmount,
+          gateway: gateway,
+          paymentMethod: paymentMethod,
+          testCardNumber: testCardNumber,
+        );
       }
     }
 
-    final paymentId = 'pay_sb_${DateTime.now().millisecondsSinceEpoch}';
+    return _simulateLocalSandboxPayment(
+      bookingId: bookingId,
+      proId: proId,
+      proName: proName,
+      serviceType: serviceType,
+      baseAmount: baseAmount,
+      feeAmount: feeAmount,
+      discountAmount: discountAmount,
+      totalAmount: totalAmount,
+      gateway: gateway,
+      paymentMethod: paymentMethod,
+      testCardNumber: testCardNumber,
+    );
+  }
+
+  Future<PaymentModel> _simulateLocalSandboxPayment({
+    required String bookingId,
+    required String proId,
+    required String proName,
+    required String serviceType,
+    required double baseAmount,
+    required double feeAmount,
+    required double discountAmount,
+    required double totalAmount,
+    required String gateway,
+    required String paymentMethod,
+    String? testCardNumber,
+  }) async {
+    await Future.delayed(const Duration(milliseconds: 1200));
+
+    final user = FirebaseAuth.instance.currentUser;
+    final clientId = user?.uid ?? 'client_anon';
+    final clientEmail = user?.email ?? '';
+    var clientName = user?.displayName ?? 'Client';
+    if (_isFirebaseReady && user != null) {
+      try {
+        final profile = await FirebaseService().getCurrentUserData();
+        clientName = profile?['fullName']?.toString() ?? clientName;
+      } catch (_) {}
+    }
+
+    final paymentId = 'pay_local_sb_${DateTime.now().millisecondsSinceEpoch}';
+    final cardNumber = (testCardNumber ?? '').replaceAll(' ', '');
+    final shouldSucceed =
+        !cardNumber.endsWith('0002') &&
+        !cardNumber.toLowerCase().contains('fail');
     final status = shouldSucceed ? PaymentStatus.success : PaymentStatus.failed;
-    final reason = shouldSucceed ? null : (failReason ?? 'La carte de test a été refusée par la passerelle de test.');
+    final reason = shouldSucceed
+        ? null
+        : 'La carte de test a été refusée par la passerelle de test.';
 
     String txnRef;
     if (gateway == 'stripe_test') {
-      txnRef = 'pi_test_${DateTime.now().millisecondsSinceEpoch}_secret';
+      txnRef = 'TXN-STRIPE-SANDBOX-${DateTime.now().millisecondsSinceEpoch}';
     } else if (gateway == 'konnect_sandbox') {
       txnRef = 'TXN-KONNECT-SANDBOX-${DateTime.now().millisecondsSinceEpoch}';
     } else {
@@ -441,6 +542,7 @@ class PaymentService {
       proName: proName,
       serviceType: serviceType,
       baseAmount: baseAmount,
+      grossAmount: (baseAmount - discountAmount).clamp(0, 999999),
       feeAmount: feeAmount,
       discountAmount: discountAmount,
       totalAmount: totalAmount,
@@ -449,59 +551,13 @@ class PaymentService {
       paymentMethod: paymentMethod,
       transactionRef: txnRef,
       failureReason: reason,
+      paymentProvider: 'local_simulation',
+      isSandbox: true,
       createdAt: DateTime.now(),
       updatedAt: DateTime.now(),
     );
 
     _localPaymentsCache[paymentId] = payment;
-
-    // Enregistrement dans Firestore
-    if (_isFirebaseReady) {
-      final data = payment.toMap();
-      data['gateway'] = gateway;
-      data['isSandbox'] = true;
-      data['isSubscription'] = isSubscription;
-      if (testCardNumber != null && testCardNumber.length >= 4) {
-        data['cardLast4'] = testCardNumber.substring(testCardNumber.length - 4);
-      }
-
-      await FirebaseFirestore.instance.collection('payments').doc(paymentId).set(data);
-
-      // Si succès et réservation liée -> mettre à jour la réservation
-      if (shouldSucceed && bookingId.isNotEmpty && bookingId != 'none') {
-        try {
-          await FirebaseFirestore.instance.collection('bookings').doc(bookingId).update({
-            'paymentStatus': 'paye',
-            'paymentId': paymentId,
-            'paidAmount': totalAmount,
-            'paidAt': FieldValue.serverTimestamp(),
-          });
-        } catch (e) {
-          debugPrint('Note: mise à jour réservation: $e');
-        }
-      }
-
-      // Si abonnement -> mettre à jour l'utilisateur
-      if (shouldSucceed && isSubscription && clientId != 'client_anon') {
-        try {
-          await FirebaseFirestore.instance.collection('users').doc(clientId).update({
-            'subscription': 'dar_plus_serenite',
-            'subscriptionStatus': 'active',
-            'subscribedAt': FieldValue.serverTimestamp(),
-          });
-        } catch (e) {
-          debugPrint('Note: mise à jour abonnement: $e');
-        }
-      }
-
-      // Journal d'audit de sécurité
-      await FirebaseService().logSecurityEvent(
-        action: shouldSucceed ? 'PAYMENT_SANDBOX_SUCCESS' : 'PAYMENT_SANDBOX_FAILED',
-        actorEmail: clientEmail.isNotEmpty ? clientEmail : 'Client',
-        target: proName,
-        details: 'Passerelle $gateway (Sandbox): ${shouldSucceed ? "Validé $totalAmount DT" : "Refusé ($reason)"}',
-      );
-    }
 
     return payment;
   }

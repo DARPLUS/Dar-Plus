@@ -1,15 +1,28 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:provider/provider.dart';
 
 import '../providers/theme_provider.dart';
 import '../providers/locale_provider.dart';
+import '../core/localization/auth_message_localizer.dart';
+import '../models/payment_model.dart';
 import '../widgets/pro_avatar_widget.dart';
+import '../widgets/booking_client_avatar.dart';
 import '../theme/app_theme.dart';
 import 'login_screen.dart';
+import '../services/call_service.dart';
 import '../services/firebase_service.dart';
+import '../services/commission_service.dart';
 import 'pro_requests_screen.dart';
+import 'client_profile_screen.dart';
+import 'map_screen.dart';
 import 'pro_services_screen.dart';
+import 'professional_earnings_screen.dart';
+import 'availability_management_screen.dart';
+import 'booking_chat_screen.dart';
 
 class ProHomeScreen extends StatefulWidget {
   final String proName;
@@ -25,90 +38,271 @@ class ProHomeScreen extends StatefulWidget {
   State<ProHomeScreen> createState() => _ProHomeScreenState();
 }
 
+class _WeeklyBookingsChart extends StatelessWidget {
+  const _WeeklyBookingsChart({required this.bookings});
+  final List<Map<String, dynamic>> bookings;
+
+  @override
+  Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final start = DateTime(
+      now.year,
+      now.month,
+      now.day,
+    ).subtract(Duration(days: now.weekday - 1));
+    final totals = List<double>.generate(7, (i) {
+      final day = start.add(Duration(days: i));
+      return bookings
+          .where((b) {
+            if ((b['status'] ?? '').toString().toLowerCase() != 'terminee')
+              return false;
+            DateTime? date;
+            for (final raw in [
+              b['completedAt'],
+              b['updatedAt'],
+              b['scheduledDateKey'],
+              b['scheduledDate'],
+              b['createdAt'],
+            ]) {
+              if (raw is DateTime) date = raw;
+              if (raw is String) date = DateTime.tryParse(raw);
+              if (date == null && raw != null) {
+                try {
+                  date = (raw as dynamic).toDate() as DateTime;
+                } catch (_) {}
+              }
+              if (date != null) break;
+            }
+            return date != null &&
+                date.year == day.year &&
+                date.month == day.month &&
+                date.day == day.day;
+          })
+          .fold<double>(0, (sum, b) {
+            final value = b['baseAmount'] ?? b['price'];
+            if (value is num) return sum + value.toDouble();
+            final match = RegExp(r'([0-9]+(?:[.,][0-9]+)?)')
+                .firstMatch(value?.toString() ?? '');
+            return sum +
+                (match == null
+                    ? 0
+                    : double.tryParse(match.group(1)!.replaceAll(',', '.')) ??
+                          0);
+          });
+    });
+    final maxValue = totals.fold<double>(0, (a, b) => a > b ? a : b);
+    const labels = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'pro_chart_revenue'.tr(),
+          style: TextStyle(fontSize: 12, color: Theme.of(context).hintColor),
+        ),
+        const SizedBox(height: 12),
+        Expanded(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: List.generate(7, (i) {
+              final height = maxValue == 0
+                  ? 3.0
+                  : (totals[i] / maxValue * 70).clamp(3.0, 70.0).toDouble();
+              return Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    Text(
+                      totals[i] == 0 ? '' : totals[i].toStringAsFixed(0),
+                      style: const TextStyle(fontSize: 9),
+                    ),
+                    const SizedBox(height: 4),
+                    Container(
+                      height: height,
+                      width: 18,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFE05D38),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Text(labels[i], style: const TextStyle(fontSize: 10)),
+                  ],
+                ),
+              );
+            }),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _ProHomeScreenState extends State<ProHomeScreen> {
   bool _isAvailable = true;
+  bool _isSharingLocation = false;
+  bool _isLocationActionInProgress = false;
   int _currentBottomNavIndex = 0;
   String? _proPhotoBase64;
+  String? _proPhotoUrl;
+  int _unreadMessages = 0;
+  double? _rating;
+  late String _displayProName;
+  StreamSubscription<int>? _unreadMessagesSub;
+  late final Stream<Map<String, dynamic>> _ratingSummaryStream;
 
   @override
   void initState() {
     super.initState();
+    _displayProName = widget.proName;
+    _ratingSummaryStream = FirebaseService().streamCurrentUserRatingSummary();
     _loadProPhoto();
+    _listenUnreadMessages();
+  }
+
+  void _listenUnreadMessages() {
+    _unreadMessagesSub = FirebaseService()
+        .streamUnreadMessageCount(isPro: true)
+        .listen((count) {
+          if (mounted) setState(() => _unreadMessages = count);
+        });
+  }
+
+  @override
+  void dispose() {
+    _unreadMessagesSub?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadProPhoto() async {
     try {
       final data = await FirebaseService().getCurrentUserData();
       if (data != null && mounted) {
-        final photo = data['photoBase64'] as String?;
+        final shouldResumeLocationSharing = data['isLocationSharing'] == true;
+        final base64Photo = data['photoBase64']?.toString().trim() ?? '';
+        final urlPhoto = data['photoUrl']?.toString().trim() ?? '';
         setState(() {
+          final fullName = data['fullName']?.toString().trim() ?? '';
+          if (fullName.isNotEmpty) _displayProName = fullName;
           _isAvailable = data['available'] as bool? ?? true;
-          if (photo != null && photo.trim().isNotEmpty)
-            _proPhotoBase64 = photo.trim();
+          _isSharingLocation = data['isLocationSharing'] == true;
+          final rating = data['rating'];
+          _rating = rating is num
+              ? rating.toDouble()
+              : double.tryParse(rating?.toString() ?? '');
+          _proPhotoBase64 = base64Photo.isEmpty ? null : base64Photo;
+          _proPhotoUrl = urlPhoto.isEmpty ? null : urlPhoto;
         });
+        if (shouldResumeLocationSharing) {
+          final resumed = await FirebaseService().updateProfessionalLocation();
+          if (!resumed && mounted) {
+            await FirebaseService().stopProfessionalLocationSharing();
+            if (mounted) setState(() => _isSharingLocation = false);
+          }
+        }
       }
     } catch (_) {}
   }
 
-  // Interventions data matching screenshot
-  final List<Map<String, dynamic>> _interventions = [
-    {
-      'client': 'Ahmed Ben Salah',
-      'time': '10:00',
-      'location': 'El Menzah 9',
-      'price': '120 TND',
-      'status': 'Confirmé',
-      'statusBg': Color(0xFFE0F2FE),
-      'statusColor': Color(0xFF0284C7),
-      'avatarAsset': 'assets/images/slide_1_photo.png',
-      'phone': '+216 98 123 456',
-      'service': 'Réparation fuite d\'eau salle de bain',
-    },
-    {
-      'client': 'Sonia Mansouri',
-      'time': '14:30',
-      'location': 'La Marsa',
-      'price': '80 TND',
-      'status': 'En route',
-      'statusBg': Color(0xFFFEF3C7),
-      'statusColor': Color(0xFFD97706),
-      'avatarAsset': 'assets/images/slide_2_photo.png',
-      'phone': '+216 22 789 012',
-      'service': 'Remplacement mitigeur cuisine',
-    },
-    {
-      'client': 'Karim Belhaj',
-      'time': '17:00',
-      'location': 'Ariana',
-      'price': '150 TND',
-      'status': 'En attente',
-      'statusBg': Color(0xFFF3E8FF),
-      'statusColor': Color(0xFF9333EA),
-      'avatarAsset': 'assets/images/slide_3_photo.png',
-      'phone': '+216 55 345 678',
-      'service': 'Installation chauffe-eau électrique',
-    },
-  ];
+  final Stream<List<Map<String, dynamic>>> _bookingsStream = FirebaseService()
+      .streamProBookings();
+  final List<Map<String, dynamic>> _interventions = const [];
+  final List<Map<String, dynamic>> _pendingRequests = const [];
 
-  // New pending requests data
-  final List<Map<String, dynamic>> _pendingRequests = [
-    {
-      'client': 'Yasmine Dridi',
-      'location': 'Les Berges du Lac 2',
-      'time': 'Demain • 09:30',
-      'price': '90 TND',
-      'service': 'Changement canalisation lavabo',
-      'avatarAsset': 'assets/images/slide_1_photo.png',
-    },
-    {
-      'client': 'Mehdi Ben Romdhane',
-      'location': 'Ennasr 2',
-      'time': 'Demain • 14:00',
-      'price': '110 TND',
-      'service': 'Débouchage colonne générale',
-      'avatarAsset': 'assets/images/slide_2_photo.png',
-    },
-  ];
+  DateTime? _bookingDate(Map<String, dynamic> booking) {
+    for (final value in [
+      booking['scheduledDateKey'],
+      booking['scheduledDate'],
+      booking['completedAt'],
+      booking['updatedAt'],
+      booking['createdAt'],
+    ]) {
+      if (value is DateTime) return value;
+      if (value is String) {
+        final parsed = DateTime.tryParse(value);
+        if (parsed != null) return parsed;
+      }
+      if (value != null) {
+        try {
+          return (value as dynamic).toDate() as DateTime;
+        } catch (_) {}
+      }
+    }
+    return null;
+  }
+
+  double _bookingAmount(Map<String, dynamic> booking) {
+    final value = booking['baseAmount'] ?? booking['price'];
+    if (value is num) return value.toDouble();
+    final match = RegExp(r'([0-9]+(?:[.,][0-9]+)?)')
+        .firstMatch(value?.toString() ?? '');
+    return match == null
+        ? 0
+        : double.tryParse(match.group(1)!.replaceAll(',', '.')) ?? 0;
+  }
+
+  bool _isSameDay(DateTime? a, DateTime b) =>
+      a != null && a.year == b.year && a.month == b.month && a.day == b.day;
+  bool _isCompleted(Map<String, dynamic> b) =>
+      (b['status'] ?? '').toString().toLowerCase() == 'terminee';
+  bool _isCancelled(Map<String, dynamic> b) =>
+      (b['status'] ?? '').toString().toLowerCase() == 'annulee';
+  bool _isPending(Map<String, dynamic> b) =>
+      (b['status'] ?? '').toString().toLowerCase() == 'en_attente';
+
+  String _bookingStatusLabel(String status) {
+    switch (status.toLowerCase()) {
+      case 'en_attente':
+        return 'pro_req_status_new'.tr();
+      case 'confirmee':
+        return 'pro_req_status_confirmed'.tr();
+      case 'terminee':
+        return 'pro_req_status_done'.tr();
+      case 'annulee':
+        return 'tab_cancelled'.tr();
+      default:
+        return status;
+    }
+  }
+
+  Widget _buildBookingCard(BuildContext context, Map<String, dynamic> booking) {
+    final status = (booking['status'] ?? 'en_attente').toString();
+    final completed = _isCompleted(booking);
+    final date = _bookingDate(booking);
+    final time = date == null
+        ? 'pro_time_to_confirm'.tr()
+        : '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: ListTile(
+        leading: BookingClientAvatar(booking: booking, size: 44),
+        title: Text(
+          (booking['clientName'] ?? booking['clientFullName'] ?? 'Client')
+              .toString(),
+        ),
+        subtitle: Text(
+          '${booking['serviceType'] ?? 'Service'} • $time\n${booking['address'] ?? 'pro_address_missing'.tr()}',
+        ),
+        isThreeLine: true,
+        trailing: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text(
+              '${_bookingAmount(booking).toStringAsFixed(0)} TND',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            Text(
+              _bookingStatusLabel(status),
+              style: TextStyle(
+                fontSize: 11,
+                color: completed ? Colors.green : const Color(0xFFE05D38),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -121,7 +315,36 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
     return Scaffold(
       backgroundColor: bgCream,
       body: _currentBottomNavIndex == 1
-          ? const ProRequestsScreen()
+          ? ProRequestsScreen(
+              onBack: () => setState(() => _currentBottomNavIndex = 0),
+            )
+          : _currentBottomNavIndex == 2
+          ? const BookingConversationsScreen(isProfessional: true)
+          : _currentBottomNavIndex == 3
+          ? const ProfessionalEarningsScreen()
+          : _currentBottomNavIndex == 5
+          ? AvailabilityManagementScreen(
+              onClose: () => setState(() => _currentBottomNavIndex = 4),
+            )
+          : _currentBottomNavIndex == 4
+          ? FutureBuilder<Map<String, dynamic>?>(
+              future: FirebaseService().getCurrentUserData(),
+              builder: (context, snapshot) {
+                final data = snapshot.data;
+                final name = (data?['fullName'] ?? _displayProName).toString();
+                final email = (data?['email'] ?? '').toString();
+                final phone = (data?['phone'] ?? '').toString();
+                return ClientProfileScreen(
+                  userName: name,
+                  userEmail: email,
+                  userPhone: phone,
+                  isProfessional: true,
+                  onManageAvailability: () =>
+                      setState(() => _currentBottomNavIndex = 5),
+                  onViewStats: () => setState(() => _currentBottomNavIndex = 0),
+                );
+              },
+            )
           : SafeArea(
               top: false,
               child: SingleChildScrollView(
@@ -143,6 +366,9 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                           // Quick Action Buttons (Demandes, Dispo, Messages, Revenus)
                           _buildQuickActionCards(context),
 
+                          const SizedBox(height: 12),
+                          _buildLocationSharingButton(context),
+
                           const SizedBox(height: 14),
 
                           // Alert / Notification Banner (2 nouvelles demandes!)
@@ -156,7 +382,13 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                           const SizedBox(height: 20),
 
                           // Section Performance cette semaine (matching screenshot 2)
-                          _buildPerformanceCard(),
+                          StreamBuilder<List<Map<String, dynamic>>>(
+                            stream: _bookingsStream,
+                            builder: (context, snapshot) =>
+                                _buildPerformanceCard(
+                                  snapshot.data ?? const [],
+                                ),
+                          ),
 
                           const SizedBox(height: 24),
                         ],
@@ -181,8 +413,11 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
         bottom: 24,
       ),
       decoration: const BoxDecoration(
-        color: Color(0xFF0F2D2A),
-        borderRadius: BorderRadius.vertical(bottom: Radius.circular(28)),
+        gradient: LinearGradient(
+          colors: [Color(0xFF172633), Color(0xFF123B3A)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -197,6 +432,7 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                   ProAvatarWidget(
                     name: widget.proName,
                     photoBase64: _proPhotoBase64 ?? '',
+                    photoUrl: _proPhotoUrl ?? '',
                     size: 50,
                     borderRadius: 16,
                     showVerifiedBadge: false,
@@ -213,7 +449,7 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                             : Colors.grey,
                         shape: BoxShape.circle,
                         border: Border.all(
-                          color: const Color(0xFF0F2D2A),
+                          color: const Color(0xFF172633),
                           width: 2.5,
                         ),
                       ),
@@ -228,7 +464,7 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '${'pro_greeting'.tr()},',
+                      '${(DateTime.now().hour < 18 ? 'good_morning' : 'good_evening').tr()},',
                       style: TextStyle(
                         fontSize: 13,
                         color: Colors.white.withValues(alpha: 0.75),
@@ -238,7 +474,9 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                     Row(
                       children: [
                         Text(
-                          widget.proName,
+                          _displayProName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.bold,
@@ -246,7 +484,6 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                           ),
                         ),
                         const SizedBox(width: 6),
-                        const Text('✌', style: TextStyle(fontSize: 18)),
                       ],
                     ),
                   ],
@@ -407,7 +644,11 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                       setState(() => _isAvailable = previous);
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
-                          content: Text('Disponibilité non enregistrée : $e'),
+                          content: Text(
+                            'profile_availability_error'.tr(
+                              namedArgs: {'error': e.toString()},
+                            ),
+                          ),
                         ),
                       );
                     }
@@ -419,36 +660,82 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
 
           const SizedBox(height: 16),
 
-          // 3 Stat KPI Cards in a row (1690 TND, 3 Aujourd'hui, 4.9/5 Note)
-          Row(
-            children: [
-              Expanded(
-                child: _buildDarkStatCard(
-                  icon: Icons.savings_rounded,
-                  iconColor: const Color(0xFFF59E0B),
-                  value: '1690 TND',
-                  label: 'pro_stat_month'.tr(),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _buildDarkStatCard(
-                  icon: Icons.check_box_rounded,
-                  iconColor: const Color(0xFF10B981),
-                  value: '3',
-                  label: 'pro_stat_today'.tr(),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _buildDarkStatCard(
-                  icon: Icons.star_rounded,
-                  iconColor: const Color(0xFFF59E0B),
-                  value: '4.9/5',
-                  label: 'pro_stat_rating'.tr(),
-                ),
-              ),
-            ],
+          // Indicateurs calculés depuis les réservations réelles.
+          StreamBuilder<List<Map<String, dynamic>>>(
+            stream: _bookingsStream,
+            builder: (context, snapshot) {
+              final bookings = snapshot.data ?? const <Map<String, dynamic>>[];
+              final now = DateTime.now();
+              final todayCount = bookings
+                  .where(
+                    (b) => _isSameDay(_bookingDate(b), now) && !_isCancelled(b),
+                  )
+                  .length;
+              return Row(
+                children: [
+                  Expanded(
+                    child: StreamBuilder<List<PaymentModel>>(
+                      stream: CommissionService().streamPayments(
+                        professionalOnly: true,
+                      ),
+                      builder: (context, paymentSnapshot) {
+                        final payments =
+                            paymentSnapshot.data ?? const <PaymentModel>[];
+                        final monthNet = payments
+                            .where(
+                              (payment) =>
+                                  payment.isSuccess &&
+                                  payment.createdAt.year == now.year &&
+                                  payment.createdAt.month == now.month,
+                            )
+                            .fold<double>(
+                              0,
+                              (sum, payment) =>
+                                  sum + payment.professionalNetAmount,
+                            );
+                        return _buildDarkStatCard(
+                          icon: Icons.savings_rounded,
+                          iconColor: const Color(0xFFF59E0B),
+                          value: paymentSnapshot.hasError
+                              ? '—'
+                              : '${monthNet.toStringAsFixed(0)} TND',
+                          label: 'pro_stat_month'.tr(),
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _buildDarkStatCard(
+                      icon: Icons.check_box_rounded,
+                      iconColor: const Color(0xFF10B981),
+                      value: '$todayCount',
+                      label: 'pro_stat_today'.tr(),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: StreamBuilder<Map<String, dynamic>>(
+                      stream: _ratingSummaryStream,
+                      builder: (context, snapshot) {
+                        final value = snapshot.data?['rating'];
+                        final rating = value is num
+                            ? value.toDouble()
+                            : (snapshot.hasData ? null : _rating);
+                        return _buildDarkStatCard(
+                          icon: Icons.star_rounded,
+                          iconColor: const Color(0xFFF59E0B),
+                          value: rating == null
+                              ? '—'
+                              : '${rating.toStringAsFixed(1)}/5',
+                          label: 'pro_stat_rating'.tr(),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
         ],
       ),
@@ -465,7 +752,7 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
       decoration: BoxDecoration(
-        color: const Color(0xFF163F3C),
+        color: const Color(0xFF203C40),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
       ),
@@ -505,8 +792,8 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
             icon: Icons.assignment_outlined,
             iconColor: const Color(0xFF475569),
             label: 'pro_action_requests'.tr(),
-            badgeCount: 2,
-            onTap: () => _showPendingRequestsSheet(context),
+            badgeCount: null,
+            onTap: () => setState(() => _currentBottomNavIndex = 1),
           ),
         ),
         const SizedBox(width: 10),
@@ -517,53 +804,109 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
             icon: Icons.calendar_month_rounded,
             iconColor: const Color(0xFF3B82F6),
             label: 'pro_action_availability'.tr(),
-            onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text(
-                    'Gestion des disponibilités et plannings ouverte',
-                  ),
-                  backgroundColor: Color(0xFF0F2D2A),
-                ),
-              );
-            },
+            onTap: () => setState(() => _currentBottomNavIndex = 5),
           ),
         ),
         const SizedBox(width: 10),
-        // 3. Messages (with badge 3)
+        // 3. Messages
         Expanded(
           child: _buildActionCard(
             context: context,
             icon: Icons.chat_bubble_outline_rounded,
             iconColor: const Color(0xFF8B5CF6),
             label: 'pro_action_messages'.tr(),
-            badgeCount: 3,
-            onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('3 nouveaux messages de clients'),
-                  backgroundColor: Color(0xFF0F2D2A),
-                ),
-              );
-            },
+            onTap: () => setState(() => _currentBottomNavIndex = 2),
           ),
         ),
         const SizedBox(width: 10),
-        // 4. Gestion des services
+        // 4. Revenus
         Expanded(
           child: _buildActionCard(
             context: context,
-            icon: Icons.handyman_outlined,
-            iconColor: const Color(0xFF0D9488),
-            label: 'Mes services',
-            onTap: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const ProServicesScreen()),
-              );
-            },
+            icon: Icons.savings_rounded,
+            iconColor: const Color(0xFFF59E0B),
+            label: 'pro_action_revenue'.tr(),
+            onTap: () => setState(() => _currentBottomNavIndex = 3),
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildLocationSharingButton(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final actionColor = _isSharingLocation
+        ? const Color(0xFFCE4935)
+        : const Color(0xFF0D7A72);
+    return SizedBox(
+      width: double.infinity,
+      child: OutlinedButton.icon(
+        onPressed: _isLocationActionInProgress ? null : _toggleLocationSharing,
+        icon: _isLocationActionInProgress
+            ? const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : Icon(
+                _isSharingLocation
+                    ? Icons.location_off_rounded
+                    : Icons.my_location_rounded,
+              ),
+        label: Text(
+          _isLocationActionInProgress
+              ? 'pro_location_loading'.tr()
+              : _isSharingLocation
+              ? 'pro_location_stop'.tr()
+              : 'pro_share_location'.tr(),
+        ),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: actionColor,
+          backgroundColor: isDark
+              ? const Color(0xFF142B35)
+              : (_isSharingLocation ? const Color(0xFFFFF1EE) : Colors.white),
+          side: BorderSide(
+            color: isDark
+                ? const Color(0xFF28535B)
+                : (_isSharingLocation
+                      ? const Color(0xFFF2B6AA)
+                      : const Color(0xFFB8DCD7)),
+          ),
+          padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 14),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _toggleLocationSharing() async {
+    final wasSharing = _isSharingLocation;
+    setState(() => _isLocationActionInProgress = true);
+    final ok = wasSharing
+        ? await FirebaseService().stopProfessionalLocationSharing()
+        : await FirebaseService().updateProfessionalLocation();
+    if (!mounted) return;
+    setState(() {
+      _isLocationActionInProgress = false;
+      if (ok) _isSharingLocation = !wasSharing;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          !ok
+              ? 'pro_location_failed'.tr()
+              : (_isSharingLocation
+                    ? 'pro_location_shared'.tr()
+                    : 'pro_location_stopped'.tr()),
+        ),
+        backgroundColor: ok
+            ? (_isSharingLocation
+                  ? const Color(0xFF10B981)
+                  : const Color(0xFF64748B))
+            : const Color(0xFFEF4444),
+      ),
     );
   }
 
@@ -648,69 +991,80 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
   // ─── 3. NOTIFICATION BANNER (2 nouvelles demandes!) ────────────────────────
   Widget _buildNotificationBanner(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    return GestureDetector(
-      onTap: () => _showPendingRequestsSheet(context),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF2A1B14) : const Color(0xFFFEF2E8),
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(
-            color: isDark ? const Color(0xFF7C2D12) : const Color(0xFFFCDCC5),
-            width: 1.2,
-          ),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
+    return StreamBuilder<List<Map<String, dynamic>>>(
+      stream: _bookingsStream,
+      builder: (context, snapshot) {
+        final pendingCount = (snapshot.data ?? const <Map<String, dynamic>>[])
+            .where(_isPending)
+            .length;
+        if (pendingCount == 0) return const SizedBox.shrink();
+        return GestureDetector(
+          onTap: () => setState(() => _currentBottomNavIndex = 1),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF2A1B14) : const Color(0xFFFEF2E8),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(
                 color: isDark
-                    ? const Color(0xFF431407)
-                    : const Color(0xFFFEE0CB),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.notifications_active_rounded,
-                color: Color(0xFFEA580C),
-                size: 22,
+                    ? const Color(0xFF7C2D12)
+                    : const Color(0xFFFCDCC5),
+                width: 1.2,
               ),
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'pro_new_requests_banner'.tr(),
-                    style: TextStyle(
-                      fontSize: 14.5,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFFE05D38),
-                    ),
+            child: Row(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? const Color(0xFF431407)
+                        : const Color(0xFFFEE0CB),
+                    shape: BoxShape.circle,
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'pro_respond_fast'.tr(),
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: isDark
-                          ? const Color(0xFFA8A29E)
-                          : const Color(0xFF78716C),
-                    ),
+                  child: const Icon(
+                    Icons.notifications_active_rounded,
+                    color: Color(0xFFEA580C),
+                    size: 22,
                   ),
-                ],
-              ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '$pendingCount ${pendingCount == 1 ? 'pro_new_request_banner'.tr() : 'pro_new_requests_banner'.tr()}',
+                        style: TextStyle(
+                          fontSize: 14.5,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFFE05D38),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'pro_respond_fast'.tr(),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: isDark
+                              ? const Color(0xFFA8A29E)
+                              : const Color(0xFF78716C),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  color: Color(0xFFE05D38),
+                  size: 20,
+                ),
+              ],
             ),
-            const Icon(
-              Icons.chevron_right_rounded,
-              color: Color(0xFFE05D38),
-              size: 20,
-            ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 
@@ -727,7 +1081,11 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
           children: [
             Row(
               children: [
-                const Text('📅', style: TextStyle(fontSize: 16)),
+                const Icon(
+                  Icons.calendar_today_rounded,
+                  size: 16,
+                  color: Color(0xFFE05D38),
+                ),
                 const SizedBox(width: 8),
                 Text(
                   'pro_today_interventions_title'.tr(),
@@ -740,16 +1098,7 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
               ],
             ),
             GestureDetector(
-              onTap: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text(
-                      'Affichage de tout le calendrier d\'interventions',
-                    ),
-                    backgroundColor: Color(0xFF0F2D2A),
-                  ),
-                );
-              },
+              onTap: () => setState(() => _currentBottomNavIndex = 1),
               child: Text(
                 'see_all'.tr(),
                 style: TextStyle(
@@ -762,8 +1111,34 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
           ],
         ),
         const SizedBox(height: 12),
-        // Interventions list
-        ..._interventions.map((item) => _buildInterventionCard(context, item)),
+        StreamBuilder<List<Map<String, dynamic>>>(
+          stream: _bookingsStream,
+          builder: (context, snapshot) {
+            if (snapshot.hasError) return Text('pro_bookings_load_error'.tr());
+            if (!snapshot.hasData)
+              return const Padding(
+                padding: EdgeInsets.all(16),
+                child: Center(child: CircularProgressIndicator()),
+              );
+            final today = snapshot.data!
+                .where(
+                  (b) =>
+                      _isSameDay(_bookingDate(b), DateTime.now()) &&
+                      !_isCancelled(b),
+                )
+                .toList();
+            if (today.isEmpty)
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 20),
+                child: Center(child: Text('pro_no_jobs_today'.tr())),
+              );
+            return Column(
+              children: today
+                  .map((b) => _buildBookingCard(context, b))
+                  .toList(),
+            );
+          },
+        ),
       ],
     );
   }
@@ -832,7 +1207,7 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                   const SizedBox(height: 4),
                   Row(
                     children: [
-                      const Text('⏰', style: TextStyle(fontSize: 12)),
+                      const Icon(Icons.schedule_rounded, size: 12),
                       const SizedBox(width: 3),
                       Text(
                         item['time'],
@@ -852,7 +1227,7 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                         ),
                       ),
                       const SizedBox(width: 6),
-                      const Text('📍', style: TextStyle(fontSize: 12)),
+                      const Icon(Icons.location_on_rounded, size: 12),
                       const SizedBox(width: 3),
                       Expanded(
                         child: Text(
@@ -906,7 +1281,7 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
   }
 
   // ─── 5. PERFORMANCE CETTE SEMAINE (matching screenshot 2) ──────────────────
-  Widget _buildPerformanceCard() {
+  Widget _buildPerformanceCard(List<Map<String, dynamic>> bookings) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cardBg = isDark ? const Color(0xFF1E293B) : Colors.white;
     final borderColor = isDark
@@ -933,7 +1308,11 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
         children: [
           Row(
             children: [
-              const Text('📊', style: TextStyle(fontSize: 16)),
+              const Icon(
+                Icons.bar_chart_rounded,
+                size: 18,
+                color: Color(0xFFE05D38),
+              ),
               const SizedBox(width: 8),
               Text(
                 'pro_weekly_performance_title'.tr(),
@@ -947,33 +1326,9 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
           ),
           const SizedBox(height: 16),
 
-          // 1. Taux d'acceptation
-          _buildPerformanceBar(
-            title: 'pro_acceptance_rate'.tr(),
-            valueText: '94%',
-            valueColor: const Color(0xFF10B981),
-            progress: 0.94,
-            barColor: const Color(0xFF10B981),
-          ),
-          const SizedBox(height: 14),
-
-          // 2. Ponctualité
-          _buildPerformanceBar(
-            title: 'pro_punctuality'.tr(),
-            valueText: '98%',
-            valueColor: const Color(0xFF0284C7),
-            progress: 0.98,
-            barColor: const Color(0xFF0284C7),
-          ),
-          const SizedBox(height: 14),
-
-          // 3. Satisfaction client
-          _buildPerformanceBar(
-            title: 'pro_customer_satisfaction'.tr(),
-            valueText: '4.9/5',
-            valueColor: const Color(0xFFF59E0B),
-            progress: 0.98,
-            barColor: const Color(0xFFF59E0B),
+          SizedBox(
+            height: 150,
+            child: _WeeklyBookingsChart(bookings: bookings),
           ),
         ],
       ),
@@ -1040,11 +1395,12 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
         ],
       ),
       child: BottomNavigationBar(
-        currentIndex: _currentBottomNavIndex,
+        currentIndex: _currentBottomNavIndex == 5 ? 4 : _currentBottomNavIndex,
         onTap: (index) {
           setState(() {
             _currentBottomNavIndex = index;
           });
+          if (index == 0) _loadProPhoto();
         },
         type: BottomNavigationBarType.fixed,
         backgroundColor: navBg,
@@ -1100,23 +1456,13 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
             label: 'pro_tab_requests'.tr(),
           ),
           BottomNavigationBarItem(
-            icon: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                const Icon(Icons.chat_bubble_outline_rounded),
-                Positioned(
-                  top: -2,
-                  right: -4,
-                  child: Container(
-                    width: 7,
-                    height: 7,
-                    decoration: const BoxDecoration(
-                      color: Color(0xFFE05D38),
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                ),
-              ],
+            icon: Badge(
+              isLabelVisible: _unreadMessages > 0,
+              label: Text(
+                _unreadMessages > 9 ? '9+' : '$_unreadMessages',
+                style: const TextStyle(fontSize: 9, color: Colors.white),
+              ),
+              child: const Icon(Icons.chat_bubble_outline_rounded),
             ),
             label: 'pro_tab_messages'.tr(),
           ),
@@ -1234,7 +1580,7 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                           ),
                           const SizedBox(width: 8),
                           Text(
-                            'Horaire prévu : Aujourd\'hui à ${item['time']}',
+                            'Scheduled time: Today at ${item['time']}',
                             style: TextStyle(color: textColor),
                           ),
                         ],
@@ -1264,7 +1610,7 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                           ),
                           const SizedBox(width: 8),
                           Text(
-                            'Téléphone : ${item['phone']}',
+                            'Phone: ${item['phone']}',
                             style: TextStyle(color: textColor),
                           ),
                         ],
@@ -1278,12 +1624,22 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                     Expanded(
                       child: OutlinedButton.icon(
                         onPressed: () {
+                          final clientId = (item['clientId'] ?? '')
+                              .toString()
+                              .trim();
                           Navigator.pop(context);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Appel vers ${item['client']}...'),
-                              backgroundColor: const Color(0xFF0F2D2A),
-                            ),
+                          if (clientId.isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('call_demo_only'.tr()),
+                                backgroundColor: const Color(0xFF0F2D2A),
+                              ),
+                            );
+                            return;
+                          }
+                          CallService.instance.startCall(
+                            calleeId: clientId,
+                            calleeName: (item['client'] ?? 'Client').toString(),
                           );
                         },
                         icon: const Icon(Icons.phone_in_talk_rounded, size: 18),
@@ -1303,12 +1659,9 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                       child: ElevatedButton.icon(
                         onPressed: () {
                           Navigator.pop(context);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                'Navigation GPS vers ${item['location']} lancée !',
-                              ),
-                              backgroundColor: const Color(0xFF10B981),
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const MapScreen(),
                             ),
                           );
                         },
@@ -1456,17 +1809,25 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                               child: OutlinedButton(
                                 onPressed: () {
                                   Navigator.pop(context);
+                                  setState(() => _currentBottomNavIndex = 1);
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
                                       content: Text(
-                                        'Demande de ${req['client']} refusée.',
+                                        'pro_manage_request_hint'.tr(),
                                       ),
+                                      backgroundColor: Color(0xFF0F2D2A),
                                     ),
                                   );
                                 },
                                 style: OutlinedButton.styleFrom(
-                                  foregroundColor: Colors.grey.shade700,
-                                  side: BorderSide(color: Colors.grey.shade300),
+                                  foregroundColor: isDark
+                                      ? const Color(0xFFCBD5E1)
+                                      : Colors.grey.shade700,
+                                  side: BorderSide(
+                                    color: isDark
+                                        ? const Color(0xFF475569)
+                                        : Colors.grey.shade300,
+                                  ),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(12),
                                   ),
@@ -1479,12 +1840,13 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                               child: ElevatedButton(
                                 onPressed: () {
                                   Navigator.pop(context);
+                                  setState(() => _currentBottomNavIndex = 1);
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
                                       content: Text(
-                                        'Demande de ${req['client']} acceptée !',
+                                        'pro_manage_request_hint'.tr(),
                                       ),
-                                      backgroundColor: const Color(0xFF10B981),
+                                      backgroundColor: Color(0xFF10B981),
                                     ),
                                   );
                                 },
@@ -1575,9 +1937,9 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            buildLangTile(ctx, 'fr', 'Français 🇫🇷'),
-            buildLangTile(ctx, 'en', 'English 🇬🇧'),
-            buildLangTile(ctx, 'ar', 'العربية 🇹🇳'),
+            buildLangTile(ctx, 'fr', 'Français'),
+            buildLangTile(ctx, 'en', 'English'),
+            buildLangTile(ctx, 'ar', 'العربية'),
           ],
         ),
       ),
@@ -1721,16 +2083,69 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
             Text('pro_notif_title'.tr()),
           ],
         ),
-        content: const Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('• 2 nouvelles demandes d\'intervention reçues aujourd\'hui.'),
-            SizedBox(height: 8),
-            Text('• Paiement de 120 TND validé pour l\'intervention d\'hier.'),
-            SizedBox(height: 8),
-            Text('• Félicitations : votre note moyenne a atteint 4.9/5 !'),
-          ],
+        content: SizedBox(
+          width: 380,
+          height: 360,
+          child: StreamBuilder<List<Map<String, dynamic>>>(
+            stream: FirebaseService().streamClientNotifications(),
+            builder: (context, snapshot) {
+              if (snapshot.hasError) {
+                return Center(child: Text('Erreur : ${snapshot.error}'));
+              }
+              if (!snapshot.hasData) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              final notifications = [...snapshot.data!]
+                ..sort((a, b) {
+                  final aDate = a['createdAt'];
+                  final bDate = b['createdAt'];
+                  final aTime = aDate is Timestamp
+                      ? aDate.millisecondsSinceEpoch
+                      : 0;
+                  final bTime = bDate is Timestamp
+                      ? bDate.millisecondsSinceEpoch
+                      : 0;
+                  return bTime.compareTo(aTime);
+                });
+              if (notifications.isEmpty) {
+                return Center(child: Text('pro_no_notifications'.tr()));
+              }
+              return ListView.separated(
+                itemCount: notifications.length,
+                separatorBuilder: (_, __) => const Divider(height: 1),
+                itemBuilder: (context, index) {
+                  final notification = notifications[index];
+                  final isRead = notification['isRead'] == true;
+                  return ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(
+                      notification['type'] == 'payment_received'
+                          ? Icons.payments_rounded
+                          : notification['type'] == 'booking_review_received'
+                          ? Icons.star_rounded
+                          : Icons.notifications_rounded,
+                      color: isRead ? Colors.grey : const Color(0xFFE05D38),
+                    ),
+                    title: Text(
+                      notification['title']?.toString() ?? 'Notification',
+                      style: TextStyle(
+                        fontWeight: isRead
+                            ? FontWeight.normal
+                            : FontWeight.w700,
+                      ),
+                    ),
+                    subtitle: Text(notification['body']?.toString() ?? ''),
+                    trailing: Text(notification['timeLabel']?.toString() ?? ''),
+                    onTap: isRead
+                        ? null
+                        : () => FirebaseService().markNotificationRead(
+                            notification['id']?.toString() ?? '',
+                          ),
+                  );
+                },
+              );
+            },
+          ),
         ),
         actions: [
           TextButton(
@@ -1787,6 +2202,39 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                 onTap: () => Navigator.pop(context),
               ),
               ListTile(
+                leading: Icon(
+                  _isSharingLocation
+                      ? Icons.location_off_rounded
+                      : Icons.my_location_rounded,
+                  color: iconColor,
+                ),
+                title: Text(
+                  _isSharingLocation
+                      ? 'pro_location_stop'.tr()
+                      : 'pro_share_location'.tr(),
+                  style: TextStyle(color: textColor),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  _toggleLocationSharing();
+                },
+              ),
+              ListTile(
+                leading: Icon(Icons.handyman_outlined, color: iconColor),
+                title: Text(
+                  'pro_services_title'.tr(),
+                  style: TextStyle(color: textColor),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const ProServicesScreen(),
+                    ),
+                  );
+                },
+              ),
+              ListTile(
                 leading: Icon(Icons.attach_money_rounded, color: iconColor),
                 title: Text(
                   'pro_settings_rates'.tr(),
@@ -1802,10 +2250,10 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                 ),
                 trailing: Text(
                   context.locale.languageCode == 'fr'
-                      ? 'Français 🇫🇷'
+                      ? 'Français'
                       : (context.locale.languageCode == 'en'
-                            ? 'English 🇬🇧'
-                            : 'العربية 🇹🇳'),
+                            ? 'English'
+                            : 'العربية'),
                   style: const TextStyle(
                     color: Color(0xFFE05D38),
                     fontWeight: FontWeight.bold,
@@ -1894,21 +2342,28 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setDialogState) {
+          final isDarkDialog = Theme.of(context).brightness == Brightness.dark;
           return AlertDialog(
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(22),
             ),
-            title: const Row(
+            title: Row(
               children: [
                 Icon(
                   Icons.lock_reset_rounded,
-                  color: Color(0xFF0F2D2A),
+                  color: isDarkDialog
+                      ? const Color(0xFF5EEAD4)
+                      : const Color(0xFF0F2D2A),
                   size: 24,
                 ),
                 SizedBox(width: 10),
                 Text(
-                  'Sécurité & Mot de passe',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  'profile_security_title'.tr(),
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.titleColorOf(context),
+                  ),
                 ),
               ],
             ),
@@ -1918,9 +2373,12 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Text(
-                      'Modifiez directement votre mot de passe professionnel DAR PLUS.',
-                      style: TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+                    Text(
+                      'profile_password_description'.tr(),
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: AppTheme.subtitleColorOf(context),
+                      ),
                     ),
                     const SizedBox(height: 16),
                     if (errorMessage != null) ...[
@@ -1930,23 +2388,29 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                           vertical: 8,
                         ),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFFEE2E2),
+                          color: isDarkDialog
+                              ? const Color(0xFF4C1D24)
+                              : const Color(0xFFFEE2E2),
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Row(
                           children: [
-                            const Icon(
+                            Icon(
                               Icons.error_outline_rounded,
-                              color: Color(0xFFDC2626),
+                              color: isDarkDialog
+                                  ? const Color(0xFFFCA5A5)
+                                  : const Color(0xFFDC2626),
                               size: 18,
                             ),
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
                                 errorMessage!,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 12,
-                                  color: Color(0xFFDC2626),
+                                  color: isDarkDialog
+                                      ? const Color(0xFFFCA5A5)
+                                      : const Color(0xFFDC2626),
                                 ),
                               ),
                             ),
@@ -1959,7 +2423,7 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                       controller: currentPassCtrl,
                       obscureText: obscureCurrent,
                       decoration: InputDecoration(
-                        labelText: 'Mot de passe actuel',
+                        labelText: 'profile_current_password'.tr(),
                         prefixIcon: const Icon(Icons.lock_outline),
                         suffixIcon: IconButton(
                           icon: Icon(
@@ -1976,7 +2440,7 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                         ),
                       ),
                       validator: (v) => v == null || v.trim().isEmpty
-                          ? 'Mot de passe actuel requis'
+                          ? 'profile_current_password_required'.tr()
                           : null,
                     ),
                     const SizedBox(height: 12),
@@ -1984,7 +2448,7 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                       controller: newPassCtrl,
                       obscureText: obscureNew,
                       decoration: InputDecoration(
-                        labelText: 'Nouveau mot de passe',
+                        labelText: 'profile_new_password'.tr(),
                         prefixIcon: const Icon(Icons.key_rounded),
                         suffixIcon: IconButton(
                           icon: Icon(
@@ -2001,8 +2465,9 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                       ),
                       validator: (v) {
                         if (v == null || v.trim().isEmpty)
-                          return 'Nouveau mot de passe requis';
-                        if (v.trim().length < 6) return 'Minimum 6 caractères';
+                          return 'profile_new_password_required'.tr();
+                        if (v.trim().length < 6)
+                          return 'password_min_length'.tr();
                         return null;
                       },
                     ),
@@ -2011,7 +2476,7 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                       controller: confirmPassCtrl,
                       obscureText: obscureConfirm,
                       decoration: InputDecoration(
-                        labelText: 'Confirmer le mot de passe',
+                        labelText: 'profile_confirm_password'.tr(),
                         prefixIcon: const Icon(Icons.key_rounded),
                         suffixIcon: IconButton(
                           icon: Icon(
@@ -2029,7 +2494,7 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                       ),
                       validator: (v) {
                         if (v != newPassCtrl.text)
-                          return 'Les mots de passe ne correspondent pas';
+                          return 'passwords_do_not_match'.tr();
                         return null;
                       },
                     ),
@@ -2040,9 +2505,9 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
             actions: [
               TextButton(
                 onPressed: isSaving ? null : () => Navigator.pop(ctx),
-                child: const Text(
-                  'Annuler',
-                  style: TextStyle(color: Color(0xFF64748B)),
+                child: Text(
+                  'cancel'.tr(),
+                  style: TextStyle(color: AppTheme.subtitleColorOf(context)),
                 ),
               ),
               ElevatedButton(
@@ -2065,14 +2530,20 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                           if (ctx.mounted) Navigator.pop(ctx);
                           messenger.showSnackBar(
                             SnackBar(
-                              content: Text(result['message'] as String),
+                              content: Text(
+                                localizePasswordChangeMessage(
+                                  result['message'] as String?,
+                                ),
+                              ),
                               backgroundColor: const Color(0xFF0F2D2A),
                             ),
                           );
                         } else {
                           setDialogState(() {
                             isSaving = false;
-                            errorMessage = result['message'] as String?;
+                            errorMessage = localizePasswordChangeMessage(
+                              result['message'] as String?,
+                            );
                           });
                         }
                       },
@@ -2092,7 +2563,7 @@ class _ProHomeScreenState extends State<ProHomeScreen> {
                           color: Colors.white,
                         ),
                       )
-                    : const Text('Mettre à jour'),
+                    : Text('update'.tr()),
               ),
             ],
           );
